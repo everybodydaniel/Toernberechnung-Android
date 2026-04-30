@@ -1,0 +1,68 @@
+{
+  "islands": [
+    {
+      "name": "Borkum",
+      "lat": 53.5957,
+      "lon": 6.6619,
+      "harbor_lat": 53.5560,
+      "harbor_lon": 6.7500,
+      "description": "Westlichste der Ostfriesischen Inseln"
+    },
+    {
+      "name": "Juist",
+      "lat": 53.6814,
+      "lon": 6.9931,
+      "harbor_lat": 53.6750,
+      "harbor_lon": 6.9900,
+      "description": "Längste Ostfriesische Insel ohne Autoverkehr"
+    },
+    {
+      "name": "Norderney",
+      "lat": 53.7078,
+      "lon": 7.1537,
+      "harbor_lat": 53.6930,
+      "harbor_lon": 7.1550,
+      "description": "Ältestes Nordseeheilbad Deutschlands"
+    },
+    {
+      "name": "Baltrum",
+      "lat": 53.7295,
+      "lon": 7.3722,
+      "harbor_lat": 53.7250,
+      "harbor_lon": 7.3700,
+      "description": "Kleinste bewohnte Ostfriesische Insel"
+    },
+    {
+      "name": "Langeoog",
+      "lat": 53.7505,
+      "lon": 7.4974,
+      "harbor_lat": 53.7450,
+      "harbor_lon": 7.4950,
+      "description": "Autofreie Insel mit Wasserturm als Wahrzeichen"
+    },
+    {
+      "name": "Spiekeroog",
+      "lat": 53.7706,
+      "lon": 7.6914,
+      "harbor_lat": 53.7650,
+      "harbor_lon": 7.6900,
+      "description": "Grüne Insel mit alter Inselkirche"
+    },
+    {
+      "name": "Wangerooge",
+      "lat": 53.7906,
+      "lon": 7.8994,
+      "harbor_lat": 53.7900,
+      "harbor_lon": 7.8700,
+      "description": "Östlichste der Ostfriesischen Inseln"
+    },
+    {
+      "name": "Emden",
+      "lat": 53.3667,
+      "lon": 7.2061,
+      "harbor_lat": 53.3350,
+      "harbor_lon": 7.1900,
+      "description": "Hafenstadt an der Emsmündung"
+    }
+  ]
+}
