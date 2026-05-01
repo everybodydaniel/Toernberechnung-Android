@@ -2,39 +2,31 @@ package com.example.trnberechnung.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.trnberechnung.dto.WeatherDto
-import com.example.trnberechnung.logic.DecisionLogic
 import com.example.trnberechnung.ui.theme.*
 import com.example.trnberechnung.viewmodel.TideViewModel
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 // Wadden Sea harbour stations with DWD-verified coordinates
 private val weatherStations = listOf(
@@ -61,8 +53,8 @@ fun WeatherOverlayScreen(viewModel: TideViewModel) {
     val forecast by viewModel.forecastData.collectAsState()
     val isLoading by viewModel.weatherLoading.collectAsState()
     val error by viewModel.weatherError.collectAsState()
+    var selectedStationName by remember { mutableStateOf("Cuxhaven") }
 
-    // Lade Wetter beim ersten Aufruf (Cuxhaven als Default)
     LaunchedEffect(Unit) {
         if (weather == null) {
             viewModel.loadWeatherForLocation()
@@ -70,8 +62,6 @@ fun WeatherOverlayScreen(viewModel: TideViewModel) {
     }
 
     val scrollState = rememberScrollState()
-
-    // Aggregate hourly data into daily summaries
     val dailyForecast = remember(forecast) { aggregateToDays(forecast) }
 
     Column(
@@ -79,65 +69,47 @@ fun WeatherOverlayScreen(viewModel: TideViewModel) {
             .fillMaxSize()
             .background(NauticalBackground)
             .verticalScroll(scrollState)
-            .padding(16.dp)
     ) {
         // ── Header ──
-        Text(
-            "WETTERDASHBOARD",
-            style = MaterialTheme.typography.labelMedium,
-            color = NauticalTextSecondary,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
+            Text(
+                "WETTER",
+                style = MaterialTheme.typography.labelSmall,
+                color = NauticalTextSecondary,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp
+            )
+            Text(
+                "DWD-WETTER NORDSEE",
+                style = MaterialTheme.typography.labelSmall,
+                color = NauticalTextSecondary,
+                fontSize = 10.sp,
+                letterSpacing = 1.sp
+            )
+        }
 
-        // ── Stationsauswahl ──
-        var selectedStationName by remember { mutableStateOf("Cuxhaven") }
-        var expanded by remember { mutableStateOf(false) }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
+        // ── 1. Horizontale Ortsauswahl ──
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
         ) {
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = !expanded }
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.menuAnchor()
-                ) {
-                    Text(
-                        selectedStationName,
-                        color = NauticalPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 24.sp
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("▼", color = NauticalPrimary, fontSize = 14.sp)
-                }
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    containerColor = NauticalSurface
-                ) {
-                    weatherStations.forEach { (name, coords) ->
-                        DropdownMenuItem(
-                            text = { Text(name, color = NauticalTextPrimary) },
-                            onClick = {
-                                selectedStationName = name
-                                viewModel.loadWeatherForLocation(coords.first, coords.second)
-                                expanded = false
-                            }
-                        )
+            items(weatherStations) { (name, coords) ->
+                LocationChip(
+                    name = name,
+                    isSelected = name == selectedStationName,
+                    weather = if (name == selectedStationName) weather else null,
+                    onClick = {
+                        selectedStationName = name
+                        viewModel.loadWeatherForLocation(coords.first, coords.second)
                     }
-                }
+                )
             }
         }
 
         // ── Ladezustand ──
         if (isLoading) {
-            Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = NauticalPrimary)
             }
             return@Column
@@ -145,494 +117,337 @@ fun WeatherOverlayScreen(viewModel: TideViewModel) {
 
         if (error != null) {
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 colors = CardDefaults.cardColors(containerColor = NauticalNoGoBg)
             ) {
-                Text(error ?: "", modifier = Modifier.padding(16.dp), color = NauticalNoGo)
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = { viewModel.loadWeatherForLocation() },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = NauticalPrimary)
-            ) {
-                Text("Erneut laden", color = NauticalTextOnPrimary)
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(error ?: "", color = NauticalNoGo)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { viewModel.loadWeatherForLocation() },
+                        colors = ButtonDefaults.buttonColors(containerColor = NauticalPrimary)
+                    ) { Text("Erneut laden", color = NauticalTextOnPrimary) }
+                }
             }
             return@Column
         }
 
         val w = weather ?: return@Column
 
-        // ══════════════════════════════════════════════════
-        // ── SEGEL-BEWERTUNG (Ampel-Banner) ──
-        // ══════════════════════════════════════════════════
-        val (isGo, isWarning, summaryText) = remember(w) {
-            DecisionLogic.evaluate(w)
-        }
-
-        val bannerBg = when {
-            !isGo -> NauticalNoGoBg
-            isWarning -> Color(0xFF2E2A0A)   // dunkles Amber
-            else -> NauticalGoBg
-        }
-        val bannerBorder = when {
-            !isGo -> NauticalNoGo
-            isWarning -> NauticalAccentWarm
-            else -> NauticalGo
-        }
-        val bannerIcon = when {
-            !isGo -> Icons.Default.Clear
-            isWarning -> Icons.Default.Warning
-            else -> Icons.Default.CheckCircle
-        }
-        val bannerLabel = when {
-            !isGo -> "TÖRN NICHT EMPFOHLEN"
-            isWarning -> "EINSCHRÄNKUNGEN"
-            else -> "GUTE SEGELBEDINGUNGEN"
-        }
-
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
-                .border(1.dp, bannerBorder.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
-            colors = CardDefaults.cardColors(containerColor = bannerBg),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        bannerIcon,
-                        contentDescription = null,
-                        tint = bannerBorder,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            "SEGEL-BEWERTUNG",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = NauticalTextSecondary,
-                            fontSize = 10.sp
-                        )
-                        Text(
-                            bannerLabel,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 18.sp,
-                            color = bannerBorder
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    summaryText,
-                    color = NauticalTextSecondary,
-                    fontSize = 12.sp
-                )
-
-                // Detail-Chips
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    val windBft = kmhToBeaufort(w.windSpeed ?: 0.0)
-                    AssessmentChip(
-                        label = "Wind Bft $windBft",
-                        isOk = windBft < 6,
-                        isWarning = windBft in 6..7
-                    )
-                    AssessmentChip(
-                        label = "Böen ${w.windGustSpeed?.let { "%.0f".format(it) } ?: "-"}",
-                        isOk = (w.windGustSpeed ?: 0.0) < 60.0,
-                        isWarning = (w.windGustSpeed ?: 0.0) in 60.0..89.9
-                    )
-                    AssessmentChip(
-                        label = "Sicht ${w.visibility?.let { if (it >= 1000) "%.1f km".format(it / 1000.0) else "${it}m" } ?: "-"}",
-                        isOk = (w.visibility ?: 10000) >= 2000,
-                        isWarning = (w.visibility ?: 10000) in 1000..1999
-                    )
-                }
-            }
-        }
-
-        // ══════════════════════════════════════════════════
-        // ── AKTUELL ──
-        // ══════════════════════════════════════════════════
-
-        Text(
-            "AKTUELL",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = NauticalTextSecondary,
-            modifier = Modifier.padding(bottom = 8.dp)
+        // ── 2. Hero-Karte ──
+        HeroWeatherCard(
+            stationName = selectedStationName,
+            weather = w,
+            dailyForecast = dailyForecast,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp)
         )
 
-        // ── Aktuell: Wind, Temperatur, Sicht ──
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            WeatherSquareCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.Search,
-                title = "Wind",
-                value = "${w.windSpeed?.let { "%.0f".format(it) } ?: "-"} km/h",
-                subValue = "Bft ${kmhToBeaufort(w.windSpeed ?: 0.0)} | ${windDirectionToText(w.windDirection ?: 0)}"
-            )
-            WeatherSquareCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.Info,
-                title = "Luft",
-                value = "${w.temperature?.let { "%.1f".format(it) } ?: "-"}°C",
-                subValue = "Taupunkt ${w.dewPoint?.let { "%.1f".format(it) } ?: "-"}°C"
-            )
-            WeatherSquareCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.Warning,
-                title = "Sicht",
-                value = "${w.visibility?.let { "%.1f".format(it / 1000.0) } ?: "-"} km",
-                subValue = "${w.visibility ?: "-"} m"
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ── Zweite Reihe: Böen, Druck, Bewölkung ──
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            WeatherSquareCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.Warning,
-                title = "Böen",
-                value = "${w.windGustSpeed?.let { "%.0f".format(it) } ?: "-"} km/h",
-                subValue = "Bft ${kmhToBeaufort(w.windGustSpeed ?: 0.0)}"
-            )
-            WeatherSquareCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.Refresh,
-                title = "Druck",
-                value = "${w.pressureMsl?.let { "%.1f".format(it) } ?: "-"} hPa",
-                subValue = "Solar ${w.solar?.let { "%.2f".format(it) } ?: "-"} kWh/m²"
-            )
-            WeatherSquareCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.Info,
-                title = "Wolken",
-                value = "${w.cloudCover ?: "-"}%",
-                subValue = "${((w.cloudCover ?: 0) * 8) / 100}/8 Okta"
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ── Dritte Reihe: Feuchtigkeit, Taupunkt, Niederschlag ──
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            WeatherSquareCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.AccountCircle,
-                title = "Feuchte",
-                value = "${w.relativeHumidity ?: "-"}%",
-                subValue = "Taup. ${w.dewPoint?.let { "%.1f".format(it) } ?: "-"}°C"
-            )
-            WeatherSquareCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.Info,
-                title = "Niederschl.",
-                value = "${w.precipitation?.let { "%.1f".format(it) } ?: "0.0"} mm",
-                subValue = "Wsk. ${w.precipitationProbability ?: "-"}%"
-            )
-            WeatherSquareCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.Info,
-                title = "Sonne",
-                value = "${w.sunshine?.let { "%.0f".format(it) } ?: "-"} min",
-                subValue = "letzte Stunde"
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ══════════════════════════════════════════════════
-        // ── 7-TAGE VORHERSAGE (erweitert) ──
-        // ══════════════════════════════════════════════════
-        Text(
-            "7-TAGE VORHERSAGE",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = NauticalTextSecondary,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        if (dailyForecast.isEmpty()) {
-            Text("Keine Vorhersagedaten verfügbar", color = NauticalTextSecondary, fontSize = 12.sp)
-        } else {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 8.dp)
+        // ── 3. Stündliche Prognose ──
+        if (forecast.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                colors = CardDefaults.cardColors(containerColor = NauticalSurface),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                items(dailyForecast) { day ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = NauticalSurface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .width(105.dp)
-                            .border(1.dp, NauticalDivider, RoundedCornerShape(12.dp))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(8.dp).fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            // Tag
-                            Text(
-                                day.dayLabel,
-                                fontWeight = FontWeight.Bold,
-                                color = NauticalTextPrimary,
-                                fontSize = 13.sp
-                            )
-                            // Wetter-Emoji + Condition
-                            Text(conditionEmoji(day.condition), fontSize = 22.sp)
-                            Text(
-                                day.condition,
-                                fontSize = 9.sp,
-                                color = NauticalTextSecondary,
-                                maxLines = 1
-                            )
-                            // Temperatur
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    "${day.highTemp}°",
-                                    fontWeight = FontWeight.Bold,
-                                    color = NauticalTextPrimary,
-                                    fontSize = 14.sp
-                                )
-                                Text(
-                                    "${day.lowTemp}°",
-                                    fontSize = 11.sp,
-                                    color = NauticalTextSecondary
-                                )
-                            }
-                            // Wind
-                            Text(
-                                "💨 ${day.maxWind} km/h",
-                                fontSize = 9.sp,
-                                color = if (day.maxWind >= 62) NauticalNoGo
-                                       else if (day.maxWind >= 39) NauticalAccentWarm
-                                       else NauticalSecondary
-                            )
-                            // Niederschlag
-                            if (day.totalPrecip > 0.1) {
-                                Text(
-                                    "🌧 ${"%.1f".format(day.totalPrecip)} mm",
-                                    fontSize = 9.sp,
-                                    color = NauticalSecondary
-                                )
-                            }
-                            // Niederschlagswahrscheinlichkeit
-                            if (day.maxPrecipProb > 0) {
-                                Text(
-                                    "☔ ${day.maxPrecipProb}%",
-                                    fontSize = 9.sp,
-                                    color = if (day.maxPrecipProb >= 70) NauticalAccentWarm
-                                           else NauticalTextSecondary
-                                )
-                            }
-                            // Sichtweite (wenn schlecht)
-                            if (day.minVisibility != null && day.minVisibility < 5000) {
-                                Text(
-                                    "🌫 ${"%.1f".format(day.minVisibility / 1000.0)} km",
-                                    fontSize = 9.sp,
-                                    color = if (day.minVisibility < 1000) NauticalNoGo
-                                           else NauticalAccentWarm
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ── WINDRICHTUNG ──
-        Text(
-            "WINDRICHTUNG",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = NauticalTextSecondary,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(160.dp)
-                .border(1.dp, NauticalDivider, RoundedCornerShape(16.dp)),
-            colors = CardDefaults.cardColors(containerColor = NauticalSurface),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        windArrow(w.windDirection ?: 0),
-                        fontSize = 40.sp
-                    )
-                    Text(
-                        "${w.windDirection ?: "-"}° ${windDirectionToText(w.windDirection ?: 0)}",
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 24.sp,
-                        color = NauticalTextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Böen bis ${w.windGustSpeed?.let { "%.0f".format(it) } ?: "-"} km/h",
-                        color = NauticalAccentWarm,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ── NIEDERSCHLAG & SONNENSCHEIN ──
-        Text(
-            "NIEDERSCHLAG & SONNENSCHEIN",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = NauticalTextSecondary,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp)
-                .border(1.dp, NauticalDivider, RoundedCornerShape(16.dp)),
-            colors = CardDefaults.cardColors(containerColor = NauticalSurface),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("Niederschlag", color = NauticalTextSecondary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Text(
-                        "${w.precipitation?.let { "%.1f".format(it) } ?: "0.0"} mm",
-                        color = NauticalTextPrimary,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 24.sp
-                    )
-                    Text(
-                        translateCondition(w.condition),
-                        color = NauticalTextSecondary,
-                        fontSize = 11.sp
-                    )
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("Sonnenschein", color = NauticalTextSecondary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Text(
-                        "${w.sunshine?.let { "%.0f".format(it) } ?: "-"} min",
-                        color = NauticalSunshine,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 24.sp
-                    )
-                    Text(
-                        "letzte Stunde",
-                        color = NauticalTextSecondary,
-                        fontSize = 11.sp
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // ══════════════════════════════════════════════════
-        // ── DATENQUELLE & AKTUALISIERUNG ──
-        // ══════════════════════════════════════════════════
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp)
-                .border(1.dp, NauticalDivider, RoundedCornerShape(12.dp)),
-            colors = CardDefaults.cardColors(containerColor = NauticalInfoBg),
-            shape = RoundedCornerShape(12.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = null,
-                        tint = NauticalInfoText,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        "DATENQUELLE",
+                        "⏰  STÜNDLICHE VORHERSAGE",
                         style = MaterialTheme.typography.labelSmall,
+                        color = NauticalTextSecondary,
                         fontWeight = FontWeight.Bold,
-                        color = NauticalInfoText,
-                        fontSize = 10.sp
+                        letterSpacing = 1.sp,
+                        modifier = Modifier.padding(bottom = 12.dp)
                     )
+                    HourlyForecastRow(forecastData = forecast, currentWeather = w)
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+            }
+        }
 
-                // Aktualisierungszeitpunkt aus dem Timestamp der Wetterdaten
-                val updateTime = w.timestamp?.let { ts ->
-                    try {
-                        val parsed = java.time.OffsetDateTime.parse(ts)
-                        val formatter = java.time.format.DateTimeFormatter.ofPattern(
-                            "dd.MM.yyyy, HH:mm 'Uhr'", Locale.GERMAN
-                        )
-                        parsed.format(formatter)
-                    } catch (_: Exception) {
-                        ts.take(16).replace("T", " ")
+        // ── 4. Detailkacheln (2-spaltig) ──
+        val windKn = w.windSpeed?.let { (it / 1.852).toInt() }
+        val gustKn = w.windGustSpeed?.let { (it / 1.852).toInt() }
+        val visKm = w.visibility?.let { it / 1000.0 }
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                DetailTile(
+                    modifier = Modifier.weight(1f),
+                    icon = "≈", label = "WIND",
+                    value = "${windKn ?: "-"} kn",
+                    subValue = "Bft ${kmhToBeaufort(w.windSpeed ?: 0.0)} · ${windDirectionToText(w.windDirection ?: 0)}"
+                )
+                DetailTile(
+                    modifier = Modifier.weight(1f),
+                    icon = "◎", label = "BÖEN",
+                    value = "${gustKn ?: "-"} kn",
+                    subValue = gustCategory(w.windGustSpeed)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                DetailTile(
+                    modifier = Modifier.weight(1f),
+                    icon = "🌡", label = "GEFÜHLT",
+                    value = "${w.dewPoint?.let { "%.0f".format(it) } ?: "-"}°C",
+                    subValue = "Feuchte ${w.relativeHumidity ?: "-"}%"
+                )
+                DetailTile(
+                    modifier = Modifier.weight(1f),
+                    icon = "⏱", label = "LUFTDRUCK",
+                    value = "${w.pressureMsl?.let { "%.0f".format(it) } ?: "-"} hPa",
+                    subValue = "Taupunkt ${w.dewPoint?.let { "%.1f".format(it) } ?: "-"}°C"
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                DetailTile(
+                    modifier = Modifier.weight(1f),
+                    icon = "👁", label = "SICHTWEITE",
+                    value = "${visKm?.let { "%.0f".format(it) } ?: "-"} km",
+                    subValue = visibilityCategory(w.visibility)
+                )
+                DetailTile(
+                    modifier = Modifier.weight(1f),
+                    icon = "☁", label = "BEWÖLKUNG",
+                    value = "${w.cloudCover ?: "-"}%",
+                    subValue = cloudCoverText(w.cloudCover)
+                )
+            }
+        }   // Ende Column Detailkacheln
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // ── 5. 7-Tage-Vorhersage ──
+        if (dailyForecast.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 32.dp),
+                colors = CardDefaults.cardColors(containerColor = NauticalSurface),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "📅  7-TAGE-VORHERSAGE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = NauticalTextSecondary,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    val weekMin = dailyForecast.minOf { it.lowTemp }
+                    val weekMax = dailyForecast.maxOf { it.highTemp }
+                    dailyForecast.forEachIndexed { index, day ->
+                        if (index > 0) HorizontalDivider(color = NauticalDivider, thickness = 0.5.dp)
+                        WeekForecastRow(day = day, weekMin = weekMin, weekMax = weekMax)
                     }
-                } ?: "Unbekannt"
+                }
+            }
+        }
+    }   // Ende äußere Column
+}       // Ende WeatherOverlayScreen
 
+
+
+// ══════════════════════════════════════════════════
+// ── NEUE COMPOSABLES (iOS-Stil) ──
+// ══════════════════════════════════════════════════
+
+@Composable
+private fun LocationChip(name: String, isSelected: Boolean, weather: WeatherDto?, onClick: () -> Unit) {
+    val chipBg = if (isSelected) NauticalSurface else Color(0xFF131F2E)
+    val chipBorder = if (isSelected) NauticalPrimary else NauticalDivider
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(chipBg)
+            .border(if (isSelected) 1.5.dp else 1.dp, chipBorder, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        if (isSelected && weather != null) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(iconToEmoji(weather.icon ?: weather.condition), fontSize = 14.sp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(name, fontWeight = FontWeight.Bold, color = NauticalTextPrimary, fontSize = 14.sp)
+                }
                 Text(
-                    "Letzte Aktualisierung: $updateTime",
-                    color = NauticalTextPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
+                    "${weather.temperature?.let { "%.0f".format(it) } ?: "-"}° · ${translateCondition(weather.icon ?: weather.condition)}",
+                    color = NauticalTextSecondary, fontSize = 10.sp, maxLines = 1
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+            }
+        } else {
+            Text(name, fontWeight = FontWeight.Normal, color = NauticalTextSecondary, fontSize = 14.sp)
+        }
+    }
+}
+
+@Composable
+private fun HeroWeatherCard(
+    stationName: String,
+    weather: WeatherDto,
+    dailyForecast: List<DailyForecast>,
+    modifier: Modifier = Modifier
+) {
+    val gradient = Brush.linearGradient(colors = listOf(Color(0xFF1A6B9E), Color(0xFF1B8A7E)))
+    val today = dailyForecast.firstOrNull()
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(gradient)
+            .padding(20.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(stationName, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = Color.White)
+                Text(iconToEmoji(weather.icon ?: weather.condition), fontSize = 42.sp)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    "Quelle: Bright Sky API (Open-Source) → Deutscher Wetterdienst (DWD)",
-                    color = NauticalTextSecondary,
-                    fontSize = 11.sp
+                    "${weather.temperature?.let { "%.0f".format(it) } ?: "-"}°",
+                    fontWeight = FontWeight.Bold, fontSize = 52.sp, color = Color.White
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "Die Wetterdaten werden stündlich vom DWD erhoben und über die Bright Sky API bereitgestellt. " +
-                    "Vorhersagen basieren auf dem MOSMIX-Modell des DWD.",
-                    color = NauticalTextSecondary,
-                    fontSize = 10.sp,
-                    lineHeight = 14.sp
-                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                    Text(
+                        translateCondition(weather.icon ?: weather.condition),
+                        fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.White
+                    )
+                    if (today != null) {
+                        Text(
+                            "H: ${today.highTemp}°  T: ${today.lowTemp}°",
+                            color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp
+                        )
+                    }
+                }
             }
         }
     }
 }
 
+@Composable
+private fun HourlyForecastRow(forecastData: List<WeatherDto>, currentWeather: WeatherDto) {
+    val berlinZone = ZoneId.of("Europe/Berlin")
+    val now = OffsetDateTime.now()
+    val nextHours = forecastData
+        .filter { dto ->
+            try { !OffsetDateTime.parse(dto.timestamp ?: "").isBefore(now.minusMinutes(30)) }
+            catch (_: Exception) { false }
+        }
+        .take(12)
+
+    val allItems: List<Pair<String?, WeatherDto>> = buildList {
+        add(null to currentWeather)
+        addAll(nextHours.map { it.timestamp to it })
+    }
+
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        items(allItems) { (ts, dto) ->
+            val label = if (ts == null) "Jetzt" else try {
+                OffsetDateTime.parse(ts).atZoneSameInstant(berlinZone)
+                    .format(DateTimeFormatter.ofPattern("HH:mm"))
+            } catch (_: Exception) { "–" }
+            val windKn = dto.windSpeed?.let { (it / 1.852).toInt() }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(label, color = NauticalTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(iconToEmoji(dto.icon ?: dto.condition), fontSize = 22.sp)
+                Text(
+                    "${dto.temperature?.let { "%.0f".format(it) } ?: "-"}°",
+                    color = NauticalTextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp
+                )
+                Text("${windKn ?: "-"} kn", color = NauticalTextSecondary, fontSize = 10.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailTile(modifier: Modifier = Modifier, icon: String, label: String, value: String, subValue: String) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = NauticalSurface),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(icon, color = NauticalTextSecondary, fontSize = 13.sp)
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(label, color = NauticalTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(value, color = NauticalPrimary, fontWeight = FontWeight.Bold, fontSize = 26.sp)
+            Text(subValue, color = NauticalTextSecondary, fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun WeekForecastRow(day: DailyForecast, weekMin: Int, weekMax: Int) {
+    val range = (weekMax - weekMin).coerceAtLeast(1).toFloat()
+    val startFrac = ((day.lowTemp - weekMin) / range).coerceIn(0f, 1f)
+    val endFrac = ((day.highTemp - weekMin) / range).coerceIn(0f, 1f)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(day.dayLabel, fontWeight = FontWeight.Bold, color = NauticalTextPrimary, fontSize = 15.sp, modifier = Modifier.width(50.dp))
+        Text(iconToEmoji(day.condition), fontSize = 20.sp, modifier = Modifier.width(32.dp))
+        Text(
+            "${day.maxPrecipProb}%",
+            color = if (day.maxPrecipProb >= 40) NauticalAccentWarm else NauticalTextSecondary,
+            fontSize = 12.sp, modifier = Modifier.width(36.dp)
+        )
+        Text("${day.lowTemp}°", color = NauticalTextSecondary, fontSize = 13.sp, modifier = Modifier.width(30.dp))
+        Box(modifier = Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(2.dp)).background(NauticalDivider)) {
+            val cs: Array<Pair<Float, Color>> = arrayOf(
+                0f to Color.Transparent,
+                startFrac to Color.Transparent,
+                startFrac to NauticalSecondary,
+                endFrac to NauticalGo,
+                endFrac to Color.Transparent,
+                1f to Color.Transparent
+            )
+            Box(
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.horizontalGradient(colorStops = cs)
+                )
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            "${day.highTemp}°", fontWeight = FontWeight.Bold, color = NauticalTextPrimary,
+            fontSize = 13.sp, modifier = Modifier.width(30.dp), textAlign = TextAlign.End
+        )
+    }
+}
+
+private fun iconToEmoji(iconOrCondition: String?): String = when (iconOrCondition) {
+    "clear-day", "clear-night", "dry" -> "☀️"
+    "partly-cloudy-day", "partly-cloudy-night" -> "⛅"
+    "cloudy" -> "☁️"
+    "fog" -> "🌫️"
+    "rain" -> "🌧️"
+    "sleet" -> "🌨️"
+    "snow" -> "❄️"
+    "hail" -> "🧊"
+    "thunderstorm" -> "⛈️"
+    "wind" -> "💨"
+    else -> conditionEmoji(translateCondition(iconOrCondition))
+}
+
 // ── Assessment Chip ──
+
+
 
 @Composable
 private fun AssessmentChip(label: String, isOk: Boolean, isWarning: Boolean) {
