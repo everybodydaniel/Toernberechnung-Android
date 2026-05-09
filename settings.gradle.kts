@@ -28,8 +28,11 @@ include(":app")
 // ══════════════════════════════════════════════════════════════
 // FIX: Redirect build output OUTSIDE OneDrive to avoid file-lock errors.
 // OneDrive syncs placeholder files that Gradle cannot delete/snapshot.
+// Only applied locally (skipped in CI environments).
 // ══════════════════════════════════════════════════════════════
-gradle.beforeProject {
-    project.layout.buildDirectory.set(file("C:/temp/toern-build/${project.name}"))
+if (System.getenv("CI") == null) {
+    gradle.beforeProject {
+        project.layout.buildDirectory.set(file("C:/temp/toern-build/${project.name}"))
+    }
 }
  
