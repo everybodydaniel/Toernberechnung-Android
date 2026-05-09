@@ -7,12 +7,12 @@ plugins {
 android {
     namespace = "com.example.trnberechnung"
 
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.trnberechnung"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -56,8 +56,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
     implementation("androidx.navigation:navigation-compose:2.7.7")
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+ 
     // MapLibre
     implementation("org.maplibre.gl:android-sdk:11.8.0")
     implementation("org.maplibre.gl:android-plugin-annotation-v9:3.0.2")
