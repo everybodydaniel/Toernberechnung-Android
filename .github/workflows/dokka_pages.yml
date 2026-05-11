@@ -34,7 +34,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Generate Dokka HTML Documentation
-        run: ./gradlew dokkaHtml
+        run: ./gradlew dokkaHtmlMultiModule
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
@@ -42,9 +42,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # The path depends on where Dokka is configured.
-          # For a single module 'app', it generates in 'app/build/dokka/html'
-          path: 'app/build/dokka/html'
+          # Use the multi-module output path
+          path: 'build/dokka/htmlMultiModule'
 
   deploy:
     environment:
