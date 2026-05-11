@@ -78,10 +78,9 @@ dependencies {
 
 tasks.withType<org.jetbrains.dokka.gradle.DokkaTaskPartial>().configureEach {
     dokkaSourceSets {
-        configureEach {
+        named("main") {
             sourceRoots.from(file("src/main/java"))
+            suppress.set(false)
         }
     }
 }
-
-
