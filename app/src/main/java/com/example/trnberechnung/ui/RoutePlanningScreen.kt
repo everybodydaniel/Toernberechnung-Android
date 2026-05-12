@@ -537,15 +537,53 @@ fun RoutePlanningScreen(viewModel: TideViewModel, routeViewModel: RoutePlanningV
                     val distStr = "%.1f nm".format(distanceNm)
                     val durStr = "${travelTimeHrs.toInt()}h ${((travelTimeHrs - travelTimeHrs.toInt()) * 60).roundToInt()}m"
                     
+                    // Build structured details for logbook
+                    val depTime = routeUiState.departureTime
+                    val arrTime = depTime.plusMinutes((travelTimeHrs * 60).toLong())
+                    val depFmt = depTime.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+                    val arrFmt = arrTime.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+
+                    // Weather info
+                    val wx = weather
+                    val weatherStr = if (wx != null) {
+                        val temp = wx.temperature?.let { "%.0f°C".format(it) } ?: ""
+                        val wind = wx.windSpeed?.let { "%.0f kn".format(it / 1.852) } ?: ""
+                        val cond = translateCondition(wx.condition ?: "")
+                        listOf(temp, wind, cond).filter { it.isNotBlank() }.joinToString(" · ")
+                    } else ""
+
+                    // Tide events
+                    val tideStr = tideEvents.take(4).joinToString(" | ") { ev ->
+                        val t = try {
+                            val clean = ev.timestamp.replace(Regex("[TZ]"), " ").replace(Regex("\\+.*"), "").trim()
+                            LocalDateTime.parse(clean, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                                .format(DateTimeFormatter.ofPattern("HH:mm"))
+                        } catch (_: Exception) { ev.timestamp.takeLast(5) }
+                        "${ev.type} $t ${ev.value?.let { "%.2fm".format(it) } ?: ""}"
+                    }
+
+                    // Crew
+                    val crewList = viewModel.allCrew.value
+                    val crewStr = if (crewList.isNotEmpty()) {
+                        crewList.filter { it.isOnBoard }.joinToString(", ") { "${it.name} (${it.rank})" }
+                            .ifEmpty { crewList.joinToString(", ") { "${it.name} (${it.rank})" } }
+                    } else ""
+
                     if (res == null) {
-                        // Create basic entry if no tide calc done yet
+                        val detailLines = listOf(
+                            "abfahrt:$depFmt",
+                            "ankunft:$arrFmt",
+                            "wetter:$weatherStr",
+                            "gezeiten:$tideStr",
+                            "crew:$crewStr"
+                        ).joinToString("|")
                         val entry = LogbookEntry(
                             date = LocalDate.now().toString(),
                             routeDesc = "$currentStart nach $currentDest",
                             distance = distStr,
                             duration = durStr,
                             status = "MANUELL",
-                            details = "Simulation am ${routeUiState.departureTime}"
+                            details = detailLines
                         )
                         viewModel.saveLog(entry)
                         resultDialogIsGo = true
@@ -553,7 +591,19 @@ fun RoutePlanningScreen(viewModel: TideViewModel, routeViewModel: RoutePlanningV
                         showResultDialog = true
                     } else {
                         val statusStr = if (res.isGo) "GO" else "NO-GO"
-                        val logText = "Wegpunkte: $currentStart ➔ $currentDest\n\nBerechnungsdaten:\n${res.logOutput}"
+                        val wtStr = "%.2f m".format(res.ukc)
+                        val ukcStr = "%.2f m".format(res.ukc - res.boatDraft)
+                        val fmwStr = "%.2f m".format(res.safetyMargin)
+                        val detailLines = listOf(
+                            "abfahrt:$depFmt",
+                            "ankunft:$arrFmt",
+                            "wt:$wtStr",
+                            "ukc:$ukcStr",
+                            "fmw:$fmwStr",
+                            "wetter:$weatherStr",
+                            "gezeiten:$tideStr",
+                            "crew:$crewStr"
+                        ).joinToString("|")
                         
                         val entry = LogbookEntry(
                             date = LocalDate.now().toString(),
@@ -561,7 +611,7 @@ fun RoutePlanningScreen(viewModel: TideViewModel, routeViewModel: RoutePlanningV
                             distance = distStr,
                             duration = durStr,
                             status = statusStr,
-                            details = logText
+                            details = detailLines
                         )
                         viewModel.saveLog(entry)
                         
@@ -705,6 +755,21 @@ private fun kmhToBft(kmh: Double): Int = when {
 private fun dirToText(deg: Int): String = when ((deg + 22) / 45 % 8) {
     0 -> "N"; 1 -> "NO"; 2 -> "O"; 3 -> "SO"
     4 -> "S"; 5 -> "SW"; 6 -> "W"; 7 -> "NW"; else -> "-"
+}
+
+private fun translateCondition(condition: String): String = when (condition.lowercase()) {
+    "dry" -> "Trocken"
+    "fog" -> "Nebel"
+    "rain" -> "Regen"
+    "sleet" -> "Schneeregen"
+    "snow" -> "Schnee"
+    "hail" -> "Hagel"
+    "thunderstorm" -> "Gewitter"
+    "clear-day", "clear-night" -> "Klar"
+    "partly-cloudy-day", "partly-cloudy-night" -> "Teilweise bewölkt"
+    "cloudy" -> "Bedeckt"
+    "wind" -> "Windig"
+    else -> condition.replaceFirstChar { it.uppercase() }
 }
 
 fun calculateDistanceNM(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

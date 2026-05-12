@@ -1,75 +1,62 @@
 package com.example.trnberechnung.ui
 
-import android.content.Context
-import android.content.Intent
-import android.os.Environment
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import com.example.trnberechnung.model.LogbookEntry
 import com.example.trnberechnung.ui.theme.*
 import com.example.trnberechnung.viewmodel.TideViewModel
-import java.io.File
-import java.io.FileOutputStream
+
+// ══════════════════════════════════════════════════════
+// iOS-matching colors (blue accent on dark bg)
+// ══════════════════════════════════════════════════════
+private val LogbookBlue = Color(0xFF0040DD)
+private val LogbookBlueBg = Color(0xFF1A2E55)
+private val LogbookChipBorder = Color(0xFF2A4070)
+private val LogbookCardBg = Color(0xFF1B2838)
+private val LogbookFieldBg = Color(0xFF162030)
+private val LogbookFieldBorder = Color(0xFF2A3A4E)
 
 @Composable
 fun LogbookScreen(viewModel: TideViewModel) {
     val logs by viewModel.allLogs.collectAsState()
     val context = LocalContext.current
-
-    var showDetails by remember { mutableStateOf(true) }
-    var showDeleteAllDialog by remember { mutableStateOf(false) }
     var logToDelete by remember { mutableStateOf<LogbookEntry?>(null) }
-    var selectedIds by remember { mutableStateOf(setOf<Int>()) }
 
-    // ── Dialog: Alle löschen ──
-    if (showDeleteAllDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteAllDialog = false },
-            containerColor = NauticalSurface,
-            title = { Text("Alle Einträge löschen?", color = NauticalTextPrimary) },
-            text = { Text("Möchten Sie wirklich alle ${logs.size} Logbuch-Einträge unwiderruflich löschen?", color = NauticalTextSecondary) },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteAllLogs()
-                    showDeleteAllDialog = false
-                    Toast.makeText(context, "Alle Einträge gelöscht", Toast.LENGTH_SHORT).show()
-                }) {
-                    Text("Löschen", color = NauticalNoGo)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteAllDialog = false }) {
-                    Text("Abbrechen", color = NauticalTextSecondary)
-                }
-            }
-        )
-    }
-
-    // ── Dialog: Einzelnen Eintrag löschen ──
+    // ── Delete confirmation dialog ──
     logToDelete?.let { entry ->
         AlertDialog(
             onDismissRequest = { logToDelete = null },
             containerColor = NauticalSurface,
             title = { Text("Eintrag löschen?", color = NauticalTextPrimary) },
-            text = { Text("\"${entry.routeDesc}\" vom ${entry.date} wirklich löschen?", color = NauticalTextSecondary) },
+            text = {
+                Text(
+                    "\"${entry.routeDesc}\" vom ${entry.date} wirklich löschen?",
+                    color = NauticalTextSecondary
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteLog(entry)
@@ -92,333 +79,363 @@ fun LogbookScreen(viewModel: TideViewModel) {
             .fillMaxSize()
             .background(NauticalBackground)
     ) {
-        // ── Header mit Aktionen ──
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-                .border(1.dp, NauticalDivider, RoundedCornerShape(12.dp)),
-            colors = CardDefaults.cardColors(containerColor = NauticalSurface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "LOGBUCH (${logs.size} Einträge)",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = NauticalTextPrimary
-                    )
-                    TextButton(onClick = { showDetails = !showDetails }) {
-                        Text(
-                            if (showDetails) "Ausblenden ▲" else "Einblenden ▼",
-                            color = NauticalPrimary
-                        )
-                    }
-                }
+        // ── Section label ──
+        Text(
+            "LOGBUCH",
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = NauticalTextSecondary,
+            letterSpacing = 1.sp
+        )
 
-                // ── Action-Buttons ──
-                if (showDetails && logs.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Alle/Keine auswählen
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val allSelected = selectedIds.size == logs.size && logs.isNotEmpty()
-                        TextButton(onClick = {
-                            selectedIds = if (allSelected) emptySet() else logs.map { it.id }.toSet()
-                        }) {
-                            Text(
-                                if (allSelected) "Keine auswählen" else "Alle auswählen",
-                                color = NauticalPrimary
-                            )
-                        }
-                        if (selectedIds.isNotEmpty()) {
-                            Text(
-                                "${selectedIds.size} ausgewählt",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = NauticalSecondary
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                val toExport = if (selectedIds.isEmpty()) logs
-                                               else logs.filter { it.id in selectedIds }
-                                exportLogbookAsTxt(context, toExport)
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = NauticalPrimary
-                            ),
-                            border = ButtonDefaults.outlinedButtonBorder(true).copy(
-                                brush = androidx.compose.ui.graphics.SolidColor(NauticalPrimary.copy(alpha = 0.5f))
-                            )
-                        ) {
-                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (selectedIds.isEmpty()) "Alle (TXT)" else "${selectedIds.size} (TXT)")
-                        }
-                        OutlinedButton(
-                            onClick = { showDeleteAllDialog = true },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = NauticalNoGo
-                            ),
-                            border = ButtonDefaults.outlinedButtonBorder(true).copy(
-                                brush = androidx.compose.ui.graphics.SolidColor(NauticalNoGo.copy(alpha = 0.5f))
-                            )
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Alle löschen")
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── Logbuch-Einträge (ausblendbar) ──
-        if (showDetails) {
-            if (logs.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("📋", style = MaterialTheme.typography.displayLarge)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "Noch keine Törns gespeichert",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = NauticalTextSecondary
-                        )
-                        Text(
-                            "Berechne einen Törn im Karte-Tab",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = NauticalTextSecondary
-                        )
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(logs, key = { it.id }) { log ->
-                        LogbookEntryCard(
-                            log = log,
-                            isSelected = log.id in selectedIds,
-                            onCheckedChange = { checked ->
-                                selectedIds = if (checked) selectedIds + log.id else selectedIds - log.id
-                            },
-                            onDelete = { logToDelete = log }
-                        )
-                    }
-                }
-            }
-        } else {
-            // Eingeklappter Platzhalter
+        if (logs.isEmpty()) {
+            // ── Empty state ──
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    "Logbuch eingeklappt – tippe oben auf \"Einblenden\"",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = NauticalTextSecondary
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("📋", style = MaterialTheme.typography.displayLarge)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Noch keine Törns gespeichert",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = NauticalTextSecondary
+                    )
+                    Text(
+                        "Berechne einen Törn im Karte-Tab",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = NauticalTextSecondary
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
+            ) {
+                items(logs, key = { it.id }) { log ->
+                    LogbookOverviewCard(
+                        log = log,
+                        onDelete = { logToDelete = log },
+                        onCreatePdf = { LogbookPdfGenerator.generate(context, log) }
+                    )
+                }
             }
         }
     }
 }
 
+// ══════════════════════════════════════════════════════
+// Main overview card (matches iOS Logbook card)
+// ══════════════════════════════════════════════════════
 @Composable
-private fun LogbookEntryCard(log: LogbookEntry, isSelected: Boolean, onCheckedChange: (Boolean) -> Unit, onDelete: () -> Unit) {
-    val isGo = log.status.contains("GO ✓") || log.status == "GO"
-    val statusColor = if (isGo) NauticalGo else if (log.status.contains("NO-GO")) NauticalNoGo else NauticalPrimary
+private fun LogbookOverviewCard(
+    log: LogbookEntry,
+    onDelete: () -> Unit,
+    onCreatePdf: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val details = parseDetails(log.details)
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, NauticalDivider, RoundedCornerShape(12.dp)),
-        colors = CardDefaults.cardColors(containerColor = NauticalSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        shape = RoundedCornerShape(12.dp)
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = LogbookCardBg),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(start = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = isSelected,
-                onCheckedChange = onCheckedChange,
-                modifier = Modifier.size(36.dp),
-                colors = CheckboxDefaults.colors(
-                    checkedColor = NauticalPrimary,
-                    uncheckedColor = NauticalTextSecondary,
-                    checkmarkColor = NauticalTextOnPrimary
-                )
-            )
-            Column(modifier = Modifier.weight(1f).padding(top = 12.dp, end = 12.dp, bottom = 12.dp)) {
-            // Status-Badge + Datum + Löschen
+        Column(modifier = Modifier.padding(16.dp)) {
+
+            // ── Header: Icon + Title + Delete ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = statusColor),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Text(
-                            log.status,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            color = if (isGo) NauticalTextOnPrimary else Color.White,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(log.date, style = MaterialTheme.typography.bodySmall, color = NauticalTextSecondary)
+                // Logbook icon
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(LogbookBlueBg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("📘", fontSize = 22.sp)
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Title + route
+                Column(modifier = Modifier.weight(1f)) {
+                    // Format date DD.MM.YYYY and add departure time
+                    val formattedDate = try {
+                        val ld = java.time.LocalDate.parse(log.date)
+                        ld.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                    } catch (_: Exception) { log.date }
+                    val depTime = details["abfahrt"]?.takeLast(5) ?: ""
+                    val titleStr = if (depTime.isNotBlank()) "Törn · $formattedDate · $depTime" else "Törn · $formattedDate"
+                    Text(
+                        titleStr,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = NauticalTextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        log.routeDesc,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = NauticalTextSecondary
+                    )
+                }
+
+                // Minimal delete icon
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(32.dp)
+                ) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = "Löschen",
-                        tint = NauticalNoGo,
+                        tint = NauticalTextSecondary,
                         modifier = Modifier.size(18.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Route
-            Text(
-                log.routeDesc,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = NauticalTextPrimary
-            )
+            // ── Summary chips ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SummaryChip(icon = "⛵", text = log.distance)
+                SummaryChip(icon = "⏱", text = log.duration)
+                SummaryChip(
+                    icon = "✓",
+                    text = formatStatus(log.status),
+                    isStatus = true,
+                    isGo = log.status.contains("GO") && !log.status.contains("NO-GO")
+                )
+            }
 
-            // Messwerte
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ── "Logbuchdaten anzeigen" toggle ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { expanded = !expanded }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(log.distance, style = MaterialTheme.typography.bodySmall, color = NauticalTextSecondary)
-                Text(log.duration, style = MaterialTheme.typography.bodySmall, color = NauticalTextSecondary)
+                Text("📋", fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Logbuchdaten anzeigen",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = NauticalPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowUp
+                    else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = NauticalTextSecondary
+                )
             }
 
-            // Details
-            if (log.details.isNotBlank()) {
+            // ── Expandable detail fields ──
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    DetailField("ABFAHRT", details["abfahrt"] ?: log.date)
+                    DetailField("ANKUNFT", details["ankunft"] ?: "–")
+                    DetailField("DISTANZ", log.distance)
+                    DetailField("WT", details["wt"] ?: "–")
+                    DetailField("UKC", details["ukc"] ?: "–")
+                    DetailField("FMW", details["fmw"] ?: "–")
+                    DetailField("WETTER", details["wetter"] ?: "–")
+                    DetailField("GEZEITEN", details["gezeiten"] ?: "–")
+                    DetailField("CREW", details["crew"] ?: "–")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ── "PDF erstellen" button ──
+            Button(
+                onClick = onCreatePdf,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = LogbookBlue,
+                    contentColor = Color.White
+                )
+            ) {
+                Text("📄", fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    log.details,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NauticalTextSecondary,
-                    modifier = Modifier.padding(top = 2.dp)
+                    "PDF erstellen",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
                 )
             }
         }
+    }
+}
+
+// ══════════════════════════════════════════════════════
+// Summary chip (outlined, with icon)
+// ══════════════════════════════════════════════════════
+@Composable
+private fun SummaryChip(
+    icon: String,
+    text: String,
+    isStatus: Boolean = false,
+    isGo: Boolean = false
+) {
+    val borderColor = when {
+        isStatus && isGo -> NauticalGo.copy(alpha = 0.5f)
+        isStatus -> NauticalNoGo.copy(alpha = 0.5f)
+        else -> LogbookChipBorder
+    }
+    val textColor = when {
+        isStatus && isGo -> NauticalGo
+        isStatus -> NauticalNoGo
+        else -> NauticalPrimary
+    }
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = Color.Transparent,
+        border = ButtonDefaults.outlinedButtonBorder(true).copy(
+            brush = androidx.compose.ui.graphics.SolidColor(borderColor)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(icon, fontSize = 13.sp)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text,
+                style = MaterialTheme.typography.labelMedium,
+                color = textColor,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
 
-// PDF Funktion wurde gelöscht
-
-// ── TXT Export (Downloads-Ordner) ──
-private fun exportLogbookAsTxt(context: Context, logs: List<LogbookEntry>) {
-    try {
-        val boatProfile = com.example.trnberechnung.model.BoatProfileRepository(context)
-        val sb = StringBuilder()
-        sb.appendLine("========================================")
-        sb.appendLine("  LOGBUCH – Törnberechnung Wattenmeer")
-        sb.appendLine("  Exportiert am ${java.time.LocalDate.now()}")
-        sb.appendLine("========================================")
-        sb.appendLine()
-
-        // Bootsprofil einfügen
-        val profileSummary = boatProfile.getProfileSummary()
-        if (profileSummary.isNotBlank()) {
-            sb.appendLine("──── BOOTSPROFIL ────")
-            sb.append(profileSummary)
-            sb.appendLine("─────────────────────")
-            sb.appendLine()
-        }
-
-        for ((index, log) in logs.withIndex()) {
-            sb.appendLine("--- Eintrag ${index + 1} ---")
-            sb.appendLine("Datum:    ${log.date}")
-            sb.appendLine("Status:   ${log.status}")
-            sb.appendLine("Route:    ${log.routeDesc}")
-            sb.appendLine("Distanz:  ${log.distance}")
-            sb.appendLine("Dauer:    ${log.duration}")
-            if (log.details.isNotBlank()) {
-                sb.appendLine("Details:  ${log.details}")
-            }
-            sb.appendLine()
-        }
-
-        sb.appendLine("========================================")
-        sb.appendLine("${logs.size} Einträge exportiert.")
-
-        // In den Downloads-Ordner schreiben
-        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        val fileName = "logbuch_${java.time.LocalDate.now()}.txt"
-        val file = File(downloadsDir, fileName)
-        file.writeText(sb.toString())
-
-        Toast.makeText(context, "Gespeichert: Downloads/$fileName", Toast.LENGTH_LONG).show()
-    } catch (e: Exception) {
-        // Fallback: App-interner Speicher + Share
-        try {
-            val sb = StringBuilder()
-            sb.appendLine("LOGBUCH – Törnberechnung Wattenmeer")
-            sb.appendLine("Exportiert am ${java.time.LocalDate.now()}")
-            sb.appendLine()
-            for ((index, log) in logs.withIndex()) {
-                sb.appendLine("--- Eintrag ${index + 1} ---")
-                sb.appendLine("${log.date} | ${log.status} | ${log.routeDesc}")
-                sb.appendLine("${log.distance} | ${log.duration}")
-                if (log.details.isNotBlank()) sb.appendLine(log.details)
-                sb.appendLine()
-            }
-            val fileName = "logbuch_${java.time.LocalDate.now()}.txt"
-            val file = File(context.filesDir, fileName)
-            file.writeText(sb.toString())
-
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(Intent.createChooser(shareIntent, "Logbuch teilen"))
-        } catch (e2: Exception) {
-            Toast.makeText(context, "Export fehlgeschlagen: ${e2.message}", Toast.LENGTH_LONG).show()
-        }
+// ══════════════════════════════════════════════════════
+// Detail field card (iOS-style rounded field)
+// ══════════════════════════════════════════════════════
+@Composable
+private fun DetailField(label: String, value: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, LogbookFieldBorder, RoundedCornerShape(12.dp))
+            .background(LogbookFieldBg, RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = NauticalTextSecondary,
+            letterSpacing = 1.sp,
+            fontSize = 11.sp
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyLarge,
+            color = NauticalTextPrimary,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
+
+// ══════════════════════════════════════════════════════
+// Parse details string into key-value map
+// ══════════════════════════════════════════════════════
+private fun parseDetails(details: String): Map<String, String> {
+    if (details.isBlank()) return emptyMap()
+    val map = mutableMapOf<String, String>()
+
+    // Split by pipe first (new structured format), then by newline/semicolon
+    val segments = details.split("|")
+    for (segment in segments) {
+        // Use first colon only as separator (value may contain colons like times)
+        val idx = segment.indexOf(':')
+        if (idx > 0) {
+            val key = segment.substring(0, idx).trim().lowercase()
+            val value = segment.substring(idx + 1).trim()
+            if (value.isNotBlank()) {
+                when (key) {
+                    "abfahrt" -> map["abfahrt"] = value
+                    "ankunft" -> map["ankunft"] = value
+                    "wt" -> map["wt"] = value
+                    "ukc" -> map["ukc"] = value
+                    "fmw" -> map["fmw"] = value
+                    "wetter" -> map["wetter"] = value
+                    "gezeiten" -> map["gezeiten"] = value
+                    "crew" -> map["crew"] = value
+                }
+            }
+        }
+    }
+    // Backward compat: if pipe parsing found nothing, try legacy newline format
+    if (map.isEmpty()) {
+        for (line in details.split("\n", ";")) {
+            val idx = line.indexOf(':')
+            if (idx > 0) {
+                val key = line.substring(0, idx).trim().lowercase()
+                val value = line.substring(idx + 1).trim()
+                if (value.isNotBlank()) when {
+                    key.contains("abfahrt") -> map["abfahrt"] = value
+                    key.contains("ankunft") -> map["ankunft"] = value
+                    key.contains("wt") || key.contains("wassertiefe") -> map["wt"] = value
+                    key.contains("ukc") -> map["ukc"] = value
+                    key.contains("fmw") -> map["fmw"] = value
+                    key.contains("wetter") -> map["wetter"] = value
+                    key.contains("gezeiten") -> map["gezeiten"] = value
+                    key.contains("crew") -> map["crew"] = value
+                }
+            }
+        }
+    }
+    if (map.isEmpty() && details.isNotBlank()) map["wetter"] = details
+    return map
+}
+
+// ══════════════════════════════════════════════════════
+// Format status text for chip
+// ══════════════════════════════════════════════════════
+private fun formatStatus(status: String): String {
+    return when {
+        status.contains("GO ✓") || status == "GO" -> "Befahrbar"
+        status.contains("NO-GO") -> "Nicht befahrbar"
+        else -> status
+    }
+}
+
+
+
