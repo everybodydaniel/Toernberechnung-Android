@@ -26,10 +26,6 @@ rootProject.name = "Törnberechnung"
 include(":app")
 
 // ══════════════════════════════════════════════════════════════
-// FIX: Redirect build output OUTSIDE OneDrive to avoid file-lock errors.
-// OneDrive syncs placeholder files that Gradle cannot delete/snapshot.
+// Build output is stored in default 'build' directory.
 // ══════════════════════════════════════════════════════════════
-gradle.beforeProject {
-    project.layout.buildDirectory.set(file("C:/temp/toern-build/${project.name}"))
-}
  

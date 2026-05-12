@@ -28,6 +28,9 @@ import com.example.trnberechnung.viewmodel.TideViewModelFactory
 import org.maplibre.android.MapLibre
 import com.example.trnberechnung.ui.MainAppScreen
 
+/**
+ * The main activity of the Törnberechnung app.
+ */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
