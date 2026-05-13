@@ -334,41 +334,32 @@ class TideViewModel(
     }
 
     companion object {
-        /** Lokale Hafen-Liste (Wattenmeer + Nordsee) – immer verfügbar, auch ohne API */
+        /** Lokale Hafen-Liste – nur echte Wattenmeer-Häfen innerhalb des Routing-Grids */
         val LOCAL_HARBOURS = listOf(
-            harbour("Emden", 53.335, 7.190),
-            harbour("Delfzijl", 53.330, 6.930),
-            harbour("Borkum", 53.560, 6.750),
-            harbour("Juist", 53.675, 6.990),
-            harbour("Norderney", 53.693, 7.155),
-            harbour("Baltrum", 53.725, 7.370),
-            harbour("Langeoog", 53.745, 7.495),
-            harbour("Spiekeroog", 53.765, 7.690),
-            harbour("Wangerooge", 53.790, 7.870),
-            harbour("Norddeich", 53.630, 7.160),
-            harbour("Greetsiel", 53.500, 7.100),
-            harbour("Norden", 53.620, 7.150),
-            harbour("Dornumersiel", 53.680, 7.400),
-            harbour("Bensersiel", 53.700, 7.520),
-            harbour("Neuharlingersiel", 53.710, 7.640),
-            harbour("Harlesiel", 53.715, 7.810),
-            harbour("Wilhelmshaven", 53.520, 8.140),
-            harbour("Hooksiel", 53.640, 8.080),
-            harbour("Carolinensiel", 53.700, 7.800),
-            harbour("Dangast", 53.450, 8.110),
-            harbour("Leer", 53.230, 7.460),
-            harbour("Aurich", 53.470, 7.480),
-            harbour("Jever", 53.570, 7.900),
-            harbour("Esens", 53.640, 7.610),
-            harbour("Wittmund", 53.580, 7.780),
-            harbour("Groningen", 53.220, 6.570),
-            harbour("Eemshaven", 53.440, 6.830),
-            harbour("Lauwersoog", 53.400, 6.200),
-            harbour("Schiermonnikoog", 53.480, 6.160),
-            harbour("Ameland", 53.450, 5.770),
-            harbour("Cuxhaven", 53.870, 8.710),
-            harbour("Bremerhaven", 53.540, 8.580),
-            harbour("Helgoland", 54.180, 7.890)
+            // ── Deutschland – Ostfriesische Inseln (Häfen) ──
+            harbour("Borkum", 53.5572, 6.7525),
+            harbour("Juist", 53.6732, 7.0015),
+            harbour("Norderney", 53.7012, 7.1585),
+            harbour("Baltrum", 53.7215, 7.3715),
+            harbour("Langeoog", 53.7285, 7.5095),
+            harbour("Spiekeroog", 53.7645, 7.6955),
+            harbour("Wangerooge", 53.7852, 7.8965),
+            // ── Deutschland – Festlandküste (Häfen) ──
+            harbour("Emden", 53.3382, 7.1945),
+            harbour("Norddeich", 53.6265, 7.1615),
+            harbour("Nessmersiel", 53.6865, 7.3615),
+            harbour("Dornumersiel", 53.6865, 7.4785),
+            harbour("Bensersiel", 53.6785, 7.5705),
+            harbour("Neuharlingersiel", 53.7015, 7.7055),
+            harbour("Harlesiel", 53.7125, 7.8105),
+            harbour("Horumersiel", 53.6862, 8.0195),
+            harbour("Hooksiel", 53.6425, 8.0825),
+            harbour("Dangast", 53.4472, 8.1175),
+            harbour("Wilhelmshaven", 53.5142, 8.1465),
+            // ── Niederlande – Wattenmeer (Häfen) ──
+            harbour("Delfzijl", 53.3305, 6.9335),
+            harbour("Termunterzijl", 53.3032, 7.0405),
+            harbour("Eemshaven", 53.4445, 6.8365)
         )
 
         private fun harbour(name: String, lat: Double, lon: Double) = TideStationData(

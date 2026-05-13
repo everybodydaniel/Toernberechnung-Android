@@ -90,6 +90,10 @@ fun MapScreen(
     routePoints: List<LatLng> = emptyList(),
     routeSegments: List<com.example.trnberechnung.model.RouteSegment> = emptyList(),
     depthPoints: List<com.example.trnberechnung.model.DepthPoint> = emptyList(),
+    harbors: List<TideStationData> = emptyList(),
+    selectedStartHarbor: TideStationData? = null,
+    selectedEndHarbor: TideStationData? = null,
+    onHarborClick: (TideStationData) -> Unit = {},
     onMapClick: (LatLng) -> Unit,
     onStationSelected: (TideStationData) -> Unit
 ) {
@@ -155,7 +159,7 @@ fun MapScreen(
     }
 
     // Line & Marker & Circle updates
-    LaunchedEffect(stations, routePoints, routeSegments, depthPoints, mapState.symbolManager, mapState.lineManager, mapState.circleManager) {
+    LaunchedEffect(stations, routePoints, routeSegments, depthPoints, harbors, selectedStartHarbor, selectedEndHarbor, mapState.symbolManager, mapState.lineManager, mapState.circleManager) {
         val sm = mapState.symbolManager ?: return@LaunchedEffect
         val lm = mapState.lineManager ?: return@LaunchedEffect
         val cm = mapState.circleManager ?: return@LaunchedEffect
@@ -166,7 +170,48 @@ fun MapScreen(
             lm.deleteAll()
             cm.deleteAll()
 
-            // 0. Draw Depth Points (Heatmap/Area view)
+            // 0. Draw Harbor Markers (⚓ clickable points for all Wadden Sea harbors)
+            harbors.forEach { harbor ->
+                val isStart = selectedStartHarbor?.area == harbor.area
+                val isEnd = selectedEndHarbor?.area == harbor.area
+                val circleColor = when {
+                    isStart -> "#1B5E20"  // Dark green
+                    isEnd -> "#B71C1C"    // Dark red
+                    else -> "#0D47A1"     // Deep blue
+                }
+                val radius = if (isStart || isEnd) 9f else 6f
+                val strokeWidth = if (isStart || isEnd) 3f else 1.5f
+
+                cm.create(
+                    CircleOptions()
+                        .withLatLng(LatLng(harbor.latitude, harbor.longitude))
+                        .withCircleRadius(radius)
+                        .withCircleColor(ColorUtils.colorToRgbaString(AndroidColor.parseColor(circleColor)))
+                        .withCircleStrokeColor(ColorUtils.colorToRgbaString(AndroidColor.WHITE))
+                        .withCircleStrokeWidth(strokeWidth)
+                )
+
+                // Label + click target
+                val labelPrefix = when {
+                    isStart -> "🟢 "
+                    isEnd -> "🔴 "
+                    else -> "⚓ "
+                }
+                sm.create(
+                    SymbolOptions()
+                        .withLatLng(LatLng(harbor.latitude, harbor.longitude))
+                        .withTextField("$labelPrefix${harbor.gaugeLabel ?: harbor.area}")
+                        .withTextSize(if (isStart || isEnd) 12f else 10f)
+                        .withTextColor(ColorUtils.colorToRgbaString(AndroidColor.WHITE))
+                        .withTextHaloColor(ColorUtils.colorToRgbaString(AndroidColor.parseColor(circleColor)))
+                        .withTextHaloWidth(1.5f)
+                        .withTextOffset(arrayOf(0f, 1.5f))
+                ).apply {
+                    this.data = com.google.gson.JsonPrimitive("harbor:${harbor.area}")
+                }
+            }
+
+            // 1. Draw Depth Points (Heatmap/Area view)
             depthPoints.forEach { dp ->
                 val color = when (dp.type) {
                     com.example.trnberechnung.model.SegmentType.SAFE -> "#4CAF50"    // Green
@@ -195,7 +240,7 @@ fun MapScreen(
                 )
             }
 
-            // 1. Draw Polyline (either segmented or single)
+            // 2. Draw Polyline (either segmented or single)
             if (routeSegments.isNotEmpty()) {
                 routeSegments.forEach { segment ->
                     val color = when (segment.type) {
@@ -219,7 +264,7 @@ fun MapScreen(
                 )
             }
 
-            // 2. Station Markers (Circles remain, Names removed as requested)
+            // 3. Station Markers (Circles remain, Names removed as requested)
             stations.forEach { station ->
                 // Adding a transparent symbol for clicking.
                 sm.create(
@@ -232,7 +277,7 @@ fun MapScreen(
                 }
             }
 
-            // 3. Draw Start/End Markers & Circles
+            // 4. Draw Start/End Route Markers & Circles
             if (routePoints.isNotEmpty()) {
                 val start = routePoints.first()
 
@@ -386,12 +431,27 @@ fun MapScreen(
                                 mapState.circleManager = CircleManager(mapView, map, style)
 
                                 sm.addClickListener { symbol ->
-                                    val name = symbol.data?.asString
-                                    stations.find { it.area == name }?.let { onStationSelected(it) }
+                                    if (mapState.isDestroyed) return@addClickListener false
+                                    
+                                    val data = symbol.data?.asString ?: ""
+                                    // Use post to avoid crashing if sm.deleteAll() is triggered 
+                                    // by the state change within the click event loop
+                                    mapView.post {
+                                        if (!mapState.isDestroyed) {
+                                            if (data.startsWith("harbor:")) {
+                                                val harborName = data.removePrefix("harbor:")
+                                                harbors.find { it.area == harborName }?.let { onHarborClick(it) }
+                                            } else {
+                                                stations.find { it.area == data }?.let { onStationSelected(it) }
+                                            }
+                                        }
+                                    }
                                     true
                                 }
                                 map.addOnMapClickListener { point ->
-                                    onMapClick(point)
+                                    if (!mapState.isDestroyed) {
+                                        onMapClick(point)
+                                    }
                                     true
                                 }
                             } catch (e: Exception) {
@@ -404,6 +464,9 @@ fun MapScreen(
                 }
 
                 wrapper
+            },
+            update = { wrapper ->
+                // Update lifecycle if needed (handled by DisposableEffect mostly)
             },
             modifier = Modifier.fillMaxSize()
         )
@@ -451,22 +514,29 @@ fun MapScreen(
         }
     }
 
-    // Single lifecycle observer - the ONLY place that manages lifecycle after factory
+    // Proper lifecycle management
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            val mapView = try {
-                // Retrieve the mapView we tagged on the wrapper
-                // This is safer than keeping a separate reference
-                null as? MapView // We'll handle lifecycle in onDispose only
-            } catch (_: Exception) { null }
+            // Note: We don't have a direct reference to mapView here anymore
+            // because it's managed inside AndroidView. 
+            // However, we should at least mark state as destroyed on dispose.
         }
         lifecycleOwner.lifecycle.addObserver(observer)
 
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             mapState.isDestroyed = true
-            mapState.symbolManager = null
-            mapState.mapLibreMap = null
+            try {
+                mapState.symbolManager?.deleteAll()
+                mapState.lineManager?.deleteAll()
+                mapState.circleManager?.deleteAll()
+                mapState.symbolManager = null
+                mapState.lineManager = null
+                mapState.circleManager = null
+                mapState.mapLibreMap = null
+            } catch (e: Exception) {
+                Log.e(TAG, "Cleanup error", e)
+            }
         }
     }
 }

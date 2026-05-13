@@ -66,6 +66,9 @@ fun RoutePlanningScreen(viewModel: TideViewModel, routeViewModel: RoutePlanningV
     var showStartDropdown by remember { mutableStateOf(false) }
     var showEndDropdown by remember { mutableStateOf(false) }
 
+    // Karten-Auswahlmodus: "start" oder "end"
+    var mapSelectionMode by remember { mutableStateOf("start") }
+
     // Route-Status
     var startLocation by remember { mutableStateOf("") }
     var destinationLocation by remember { mutableStateOf("") }
@@ -155,12 +158,53 @@ fun RoutePlanningScreen(viewModel: TideViewModel, routeViewModel: RoutePlanningV
                     }
                 }
             }
+            // ── Karten-Auswahlmodus ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 8.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = mapSelectionMode == "start",
+                    onClick = { mapSelectionMode = "start" },
+                    label = { Text("🟢 Starthafen", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF1B5E20).copy(alpha = 0.2f),
+                        selectedLabelColor = Color(0xFF1B5E20)
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        selectedBorderColor = Color(0xFF1B5E20),
+                        enabled = true,
+                        selected = mapSelectionMode == "start"
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+                FilterChip(
+                    selected = mapSelectionMode == "end",
+                    onClick = { mapSelectionMode = "end" },
+                    label = { Text("🔴 Zielhafen", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFFB71C1C).copy(alpha = 0.2f),
+                        selectedLabelColor = Color(0xFFB71C1C)
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        selectedBorderColor = Color(0xFFB71C1C),
+                        enabled = true,
+                        selected = mapSelectionMode == "end"
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
             // ── Karte ──
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(420.dp) // Slightly taller for reset button
-                    .padding(16.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 8.dp)
                     .shadow(8.dp, RoundedCornerShape(16.dp))
                     .clip(RoundedCornerShape(16.dp))
                     .border(1.dp, NauticalDivider, RoundedCornerShape(16.dp))
@@ -171,7 +215,56 @@ fun RoutePlanningScreen(viewModel: TideViewModel, routeViewModel: RoutePlanningV
                     routePoints = routeUiState.route,
                     routeSegments = routeUiState.routeSegments,
                     depthPoints = routeUiState.depthPoints,
-                    onMapClick = { /* Deaktiviert – Häfen werden über Dropdown ausgewählt */ },
+                    harbors = allStations,
+                    selectedStartHarbor = selectedStartStation,
+                    selectedEndHarbor = selectedEndStation,
+                    onHarborClick = { harbor ->
+                        if (mapSelectionMode == "start") {
+                            // Gleicher-Hafen-Validierung
+                            if (selectedEndStation?.area == harbor.area) {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Start- und Zielhafen dürfen nicht identisch sein!")
+                                }
+                            } else {
+                                selectedStartStation = harbor
+                                startLocation = harbor.gaugeLabel ?: harbor.area
+                                viewModel.selectStation(harbor)
+                                mapSelectionMode = "end" // Auto-Wechsel zu Zielhafen
+                                selectedEndStation?.let { end ->
+                                    val startPt = LatLng(harbor.latitude, harbor.longitude)
+                                    val endPt = LatLng(end.latitude, end.longitude)
+                                    routeViewModel.loadAndCalculate(
+                                        tideEvents = tideEvents,
+                                        departureTime = routeUiState.departureTime,
+                                        customStart = startPt,
+                                        customEnd = endPt
+                                    )
+                                }
+                            }
+                        } else {
+                            // Gleicher-Hafen-Validierung
+                            if (selectedStartStation?.area == harbor.area) {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Start- und Zielhafen dürfen nicht identisch sein!")
+                                }
+                            } else {
+                                selectedEndStation = harbor
+                                destinationLocation = harbor.gaugeLabel ?: harbor.area
+                                mapSelectionMode = "start" // Zurücksetzen
+                                selectedStartStation?.let { start ->
+                                    val startPt = LatLng(start.latitude, start.longitude)
+                                    val endPt = LatLng(harbor.latitude, harbor.longitude)
+                                    routeViewModel.loadAndCalculate(
+                                        tideEvents = tideEvents,
+                                        departureTime = routeUiState.departureTime,
+                                        customStart = startPt,
+                                        customEnd = endPt
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    onMapClick = { /* Deaktiviert – Häfen werden über Marker/Dropdown ausgewählt */ },
                     onStationSelected = { station ->
                         // Station-Info anzeigen, aber keine Route setzen
                         viewModel.selectStation(station)
@@ -186,6 +279,7 @@ fun RoutePlanningScreen(viewModel: TideViewModel, routeViewModel: RoutePlanningV
                             destinationLocation = ""
                             selectedStartStation = null
                             selectedEndStation = null
+                            mapSelectionMode = "start"
                             routeViewModel.loadAndCalculate()
                         },
                         colors = ButtonDefaults.buttonColors(
@@ -310,28 +404,39 @@ fun RoutePlanningScreen(viewModel: TideViewModel, routeViewModel: RoutePlanningV
                             onDismissRequest = { showStartDropdown = false },
                             containerColor = NauticalSurface
                         ) {
-                            val targetNames = setOf("Borkum", "Juist", "Norderney", "Baltrum", "Langeoog", "Spiekeroog", "Wangerooge", "Emden")
-                            allStations.filter { station -> 
-                                targetNames.any { (station.gaugeLabel ?: station.area).contains(it, ignoreCase = true) }
-                            }.forEach { station ->
+                            allStations.sortedBy { it.gaugeLabel ?: it.area }.forEach { station ->
+                                val isSameAsEnd = selectedEndStation?.area == station.area
                                 DropdownMenuItem(
-                                    text = { Text(station.gaugeLabel ?: station.area, color = NauticalTextPrimary, fontSize = 13.sp) },
+                                    text = {
+                                        Text(
+                                            (station.gaugeLabel ?: station.area) + if (isSameAsEnd) " (= Ziel)" else "",
+                                            color = if (isSameAsEnd) NauticalTextSecondary.copy(alpha = 0.5f) else NauticalTextPrimary,
+                                            fontSize = 13.sp
+                                        )
+                                    },
                                     onClick = {
-                                        selectedStartStation = station
-                                        startLocation = station.gaugeLabel ?: station.area
-                                        viewModel.selectStation(station)
-                                        showStartDropdown = false
-                                        selectedEndStation?.let { end ->
-                                            val startPt = LatLng(station.latitude, station.longitude)
-                                            val endPt = LatLng(end.latitude, end.longitude)
-                                            routeViewModel.loadAndCalculate(
-                                                tideEvents = tideEvents,
-                                                departureTime = routeUiState.departureTime,
-                                                customStart = startPt,
-                                                customEnd = endPt
-                                            )
+                                        if (isSameAsEnd) {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar("Start- und Zielhafen dürfen nicht identisch sein!")
+                                            }
+                                        } else {
+                                            selectedStartStation = station
+                                            startLocation = station.gaugeLabel ?: station.area
+                                            viewModel.selectStation(station)
+                                            showStartDropdown = false
+                                            selectedEndStation?.let { end ->
+                                                val startPt = LatLng(station.latitude, station.longitude)
+                                                val endPt = LatLng(end.latitude, end.longitude)
+                                                routeViewModel.loadAndCalculate(
+                                                    tideEvents = tideEvents,
+                                                    departureTime = routeUiState.departureTime,
+                                                    customStart = startPt,
+                                                    customEnd = endPt
+                                                )
+                                            }
                                         }
-                                    }
+                                    },
+                                    enabled = !isSameAsEnd
                                 )
                             }
                         }
@@ -367,27 +472,38 @@ fun RoutePlanningScreen(viewModel: TideViewModel, routeViewModel: RoutePlanningV
                             onDismissRequest = { showEndDropdown = false },
                             containerColor = NauticalSurface
                         ) {
-                            val targetNames = setOf("Borkum", "Juist", "Norderney", "Baltrum", "Langeoog", "Spiekeroog", "Wangerooge", "Emden")
-                            allStations.filter { station -> 
-                                targetNames.any { (station.gaugeLabel ?: station.area).contains(it, ignoreCase = true) }
-                            }.forEach { station ->
+                            allStations.sortedBy { it.gaugeLabel ?: it.area }.forEach { station ->
+                                val isSameAsStart = selectedStartStation?.area == station.area
                                 DropdownMenuItem(
-                                    text = { Text(station.gaugeLabel ?: station.area, color = NauticalTextPrimary, fontSize = 13.sp) },
+                                    text = {
+                                        Text(
+                                            (station.gaugeLabel ?: station.area) + if (isSameAsStart) " (= Start)" else "",
+                                            color = if (isSameAsStart) NauticalTextSecondary.copy(alpha = 0.5f) else NauticalTextPrimary,
+                                            fontSize = 13.sp
+                                        )
+                                    },
                                     onClick = {
-                                        selectedEndStation = station
-                                        destinationLocation = station.gaugeLabel ?: station.area
-                                        showEndDropdown = false
-                                        selectedStartStation?.let { start ->
-                                            val startPt = LatLng(start.latitude, start.longitude)
-                                            val endPt = LatLng(station.latitude, station.longitude)
-                                            routeViewModel.loadAndCalculate(
-                                                tideEvents = tideEvents,
-                                                departureTime = routeUiState.departureTime,
-                                                customStart = startPt,
-                                                customEnd = endPt
-                                            )
+                                        if (isSameAsStart) {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar("Start- und Zielhafen dürfen nicht identisch sein!")
+                                            }
+                                        } else {
+                                            selectedEndStation = station
+                                            destinationLocation = station.gaugeLabel ?: station.area
+                                            showEndDropdown = false
+                                            selectedStartStation?.let { start ->
+                                                val startPt = LatLng(start.latitude, start.longitude)
+                                                val endPt = LatLng(station.latitude, station.longitude)
+                                                routeViewModel.loadAndCalculate(
+                                                    tideEvents = tideEvents,
+                                                    departureTime = routeUiState.departureTime,
+                                                    customStart = startPt,
+                                                    customEnd = endPt
+                                                )
+                                            }
                                         }
-                                    }
+                                    },
+                                    enabled = !isSameAsStart
                                 )
                             }
                         }

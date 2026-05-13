@@ -65,7 +65,6 @@ object SeaRouteCalculator {
         LatLng(53.66, 7.25),   // Norden coast
         LatLng(53.63, 7.15),   // Norddeich
         LatLng(53.60, 7.10),   // Leybucht area
-        LatLng(53.55, 7.00),   // Greetsiel area
         LatLng(53.50, 6.90),   // Ems coast
         LatLng(53.45, 6.85),   // Pilsum area
         LatLng(53.40, 6.88),   // Campen

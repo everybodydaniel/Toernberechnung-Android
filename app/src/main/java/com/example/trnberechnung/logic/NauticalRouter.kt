@@ -58,7 +58,6 @@ object NauticalRouter {
         WP("bensersiel_hbr", 53.712, 7.573, 2.0),
         WP("neuharling_hbr", 53.700, 7.705, 2.0),
         WP("harlesiel_hbr",  53.708, 7.811, 2.0),
-        WP("greetsiel_hbr",  53.501, 7.095, 1.5),
         WP("emden_hbr",      53.335, 7.190, 6.0),
 
         // Connecting waypoints for the island route (Fairways)
@@ -77,7 +76,6 @@ object NauticalRouter {
         WP("ems_rysum",     53.380, 6.940, 9.0),   // Ems off Rysum
         WP("ems_campen",    53.410, 6.910, 8.0),   // Ems off Campen
         WP("ems_pilsum",    53.450, 6.880, 7.0),   // Off Pilsumer Leuchtturm
-        WP("ems_greetsiel", 53.490, 6.860, 6.0),   // Off Greetsiel
         WP("ems_leybuchtn", 53.530, 6.840, 5.0),   // Leybucht north
         WP("ems_upper",     53.553, 6.800, 7.0),   // Upper Ems
         WP("ems_mouth",     53.580, 6.750, 8.0),   // Westerems / Ems mouth
@@ -132,15 +130,44 @@ object NauticalRouter {
         WP("bensersiel_hbr", 53.710, 7.570, 2.0),
         WP("neuharling_hbr", 53.710, 7.700, 2.0),
         WP("harlesiel_hbr",  53.715, 7.810, 2.0),
-        WP("greetsiel_hbr",  53.500, 7.100, 1.5),
 
-        // === JADE / WILHELMSHAVEN ===
-        // Jade channel runs NORTH from WHV, staying east of the coast
-        WP("jade_whv",       53.530, 8.150),  // WHV harbor approach
-        WP("jade_inner",     53.580, 8.130),  // Inner Jade
-        WP("jade_hooksiel",  53.640, 8.110),  // Off Hooksiel, east side
-        WP("jade_outer",     53.710, 8.060),  // Outer Jade
-        WP("jade_approach",  53.770, 8.020),  // Jade / Wangerooge approach
+        // === JADE / WILHELMSHAVEN (Fahrwasser) ===
+        WP("jade_entrance",  53.780, 8.050, 15.0),
+        WP("jade_wanger",    53.730, 8.080, 15.0),
+        WP("jade_horum",     53.690, 8.100, 14.0),
+        WP("jade_hooksiel",  53.640, 8.120, 14.0),
+        WP("jade_voslap",    53.600, 8.140, 16.0), // Voslapper Groden
+        WP("jade_jwp",       53.585, 8.150, 18.0), // Jade-Weser-Port
+        WP("jade_ruest",     53.560, 8.160, 12.0), // Rüstersiel approach
+        WP("jade_whv_appr",  53.525, 8.170, 10.0), // WHV Port entrance
+        WP("jade_inner_s",   53.480, 8.180, 5.0),  // Heading south to Dangast
+        WP("jade_dangast_a", 53.450, 8.150, 2.0),  // Dangast approach
+
+        // === HARBOR WAYPOINTS (precise locations matching TideViewModel) ===
+        WP("borkum_hbr_p",   53.5572, 6.7525, 4.0),
+        WP("juist_hbr_p",    53.6732, 7.0015, 1.2),
+        WP("norderney_hbr_p", 53.7012, 7.1585, 3.5),
+        WP("baltrum_hbr_p",  53.7215, 7.3715, 1.0),
+        WP("langeoog_hbr_p", 53.7285, 7.5095, 1.5),
+        WP("spiekeroog_hbr_p", 53.7645, 7.6955, 1.8),
+        WP("wangerooge_hbr_p", 53.7852, 7.8965, 1.5),
+        
+        WP("norddeich_hbr_p", 53.6265, 7.1615, 2.5),
+        WP("nessmersiel_hbr",53.6865, 7.3615, 0.5),
+        WP("dornum_hbr",     53.6865, 7.4785, 0.5),
+        WP("bensersiel_hbr_p", 53.6785, 7.5705, 2.0),
+        WP("neuharling_hbr_p", 53.7015, 7.7055, 2.0),
+        WP("harlesiel_hbr_p", 53.7125, 7.8105, 2.0),
+        
+        WP("horumersiel_hbr",53.6862, 8.0195, 1.0),
+        WP("hooksiel_hbr",   53.6425, 8.0825, 2.0),
+        WP("dangast_hbr",    53.4472, 8.1175, 0.5),
+        WP("whv_hbr",        53.5142, 8.1465, 5.0),
+
+        // === JADE CONNECTORS ===
+        WP("horum_fairway",  53.687, 8.080, 5.0), // Connector Horumersiel to Jade
+        WP("hooksiel_fairway", 53.642, 8.100, 4.0), // Connector Hooksiel to Jade
+        WP("whv_fairway",    53.520, 8.160, 8.0), // Connector WHV to Jade
 
         // === LEYBUCHT AREA (connecting Ems to coast) ===
         WP("leybucht_w",     53.530, 6.920),  // Leybucht west entrance from Ems
@@ -159,8 +186,7 @@ object NauticalRouter {
         "ems_knock" to "ems_rysum",
         "ems_rysum" to "ems_campen",
         "ems_campen" to "ems_pilsum",
-        "ems_pilsum" to "ems_greetsiel",
-        "ems_greetsiel" to "ems_leybuchtn",
+        "ems_pilsum" to "ems_leybuchtn",
         "ems_leybuchtn" to "ems_upper",
         "ems_upper" to "ems_mouth",
 
@@ -197,7 +223,7 @@ object NauticalRouter {
         "seegat_spiekeroog" to "watt_harlesiel",
 
         "sea_wangerooge" to "seegat_wangerooge",
-        "seegat_wangerooge" to "jade_approach",
+        "seegat_wangerooge" to "jade_entrance",
 
         // Busetief (Norddeich-Norderney ferry route)
         "norddeich_off" to "busetief_s",
@@ -215,16 +241,31 @@ object NauticalRouter {
         "watt_bensersiel" to "watt_neuharling",
         "watt_neuharling" to "watt_harlesiel",
         "watt_harlesiel" to "watt_wangerooge",
-        "watt_wangerooge" to "jade_approach",
+        "watt_wangerooge" to "jade_entrance",
 
-        // Jade channel (north from WHV, staying east of coast)
-        "jade_whv" to "jade_inner",
-        "jade_inner" to "jade_hooksiel",
-        "jade_hooksiel" to "jade_outer",
-        "jade_outer" to "jade_approach",
+        // Jade channel (north-south)
+        "jade_entrance" to "jade_wanger",
+        "jade_wanger" to "jade_horum",
+        "jade_horum" to "jade_hooksiel",
+        "jade_hooksiel" to "jade_voslap",
+        "jade_voslap" to "jade_jwp",
+        "jade_jwp" to "jade_ruest",
+        "jade_ruest" to "jade_whv_appr",
+        "jade_whv_appr" to "jade_inner_s",
+        "jade_inner_s" to "jade_dangast_a",
+
+        // Jade connectors to harbors
+        "horumersiel_hbr" to "horum_fairway",
+        "horum_fairway" to "jade_horum",
+        "hooksiel_hbr" to "hooksiel_fairway",
+        "hooksiel_fairway" to "jade_hooksiel",
+        "whv_hbr" to "whv_fairway",
+        "whv_fairway" to "jade_whv_appr",
+        "dangast_hbr" to "jade_dangast_a",
+        "wangerooge_hbr_p" to "jade_wanger",
 
         // Leybucht connector: Ems ↔ Norddeich
-        "ems_greetsiel" to "leybucht_w",
+        "ems_pilsum" to "leybucht_w",
         "ems_leybuchtn" to "leybucht_w",
         "leybucht_w" to "leybucht_e",
         "leybucht_e" to "leybucht_coast",
@@ -232,34 +273,33 @@ object NauticalRouter {
         "norddeich_appr" to "norddeich_off",
 
         // --- Connections for the Island Route ---
-        "borkum_hbr" to "borkum_east",
+        "borkum_hbr_p" to "borkum_east",
         "borkum_east" to "memmert_w",
         "memmert_w" to "juist_s",
-        "juist_s" to "juist_hbr",
+        "juist_s" to "juist_hbr_p",
         "juist_s" to "norderney_sw",
-        "norderney_sw" to "norderney_hbr",
-        "norderney_hbr" to "norderney_s",
+        "norderney_sw" to "norderney_hbr_p",
+        "norderney_hbr_p" to "norderney_s",
         "norderney_s" to "watt_norden",
         "watt_norden" to "baltrum_s",
-        "baltrum_s" to "baltrum_hbr",
+        "baltrum_s" to "baltrum_hbr_p",
         "baltrum_s" to "watt_nesskana",
         "watt_nesskana" to "langeoog_s",
-        "langeoog_s" to "langeoog_hbr",
+        "langeoog_s" to "langeoog_hbr_p",
         "langeoog_s" to "watt_bensersiel",
         "watt_bensersiel" to "spiekeroog_s",
-        "spiekeroog_s" to "spiekeroog_hbr",
+        "spiekeroog_s" to "spiekeroog_hbr_p",
         "spiekeroog_s" to "watt_neuharling",
         "watt_neuharling" to "wangerooge_s",
-        "wangerooge_s" to "wangerooge_hbr",
+        "wangerooge_s" to "wangerooge_hbr_p",
         "wangerooge_s" to "watt_harlesiel",
         "watt_harlesiel" to "watt_wangerooge",
 
         // Mainland connections
-        "norddeich_hbr" to "norddeich_off",
-        "bensersiel_hbr" to "watt_bensersiel",
-        "neuharling_hbr" to "watt_neuharling",
-        "harlesiel_hbr" to "watt_harlesiel",
-        "greetsiel_hbr" to "ems_greetsiel",
+        "norddeich_hbr_p" to "norddeich_off",
+        "bensersiel_hbr_p" to "watt_bensersiel",
+        "neuharling_hbr_p" to "watt_neuharling",
+        "harlesiel_hbr_p" to "watt_harlesiel",
         "emden_hbr" to "ems_emden_w",
         "emden_port" to "emden_hbr",
         "emden_hbr" to "emden_outer",
@@ -268,7 +308,7 @@ object NauticalRouter {
         // Original chain connections
         "W1" to "W2", "W2" to "W3", "W3" to "W4", "W4" to "W5", "W5" to "W6",
         "W1" to "ems_mouth",
-        "W6" to "ems_greetsiel",
+        "W6" to "ems_leybuchtn",
 
         // Osterems (O-Piles) chain
         "O1" to "O2", "O2" to "O3", "O3" to "O4", "O4" to "O5", "O5" to "O6",
@@ -293,7 +333,6 @@ object NauticalRouter {
         "bensersiel_hbr" to "watt_bensersiel",
         "neuharling_hbr" to "watt_neuharling",
         "harlesiel_hbr" to "watt_harlesiel",
-        "greetsiel_hbr" to "ems_greetsiel",
         "emden_hbr" to "ems_emden_w",
         "emden_port" to "emden_hbr",
         "emden_hbr" to "emden_outer",
@@ -441,6 +480,8 @@ object NauticalRouter {
                 event to dt
             } catch (_: Exception) { null }
         }.sortedBy { it.second }
+
+        if (sorted.isEmpty()) return 0.0
 
         // Find the window (previous and next event)
         val nextIndex = sorted.indexOfFirst { it.second.isAfter(time) }
