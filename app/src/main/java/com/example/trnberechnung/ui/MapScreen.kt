@@ -243,6 +243,42 @@ fun MapScreen(
                 )
             }
 
+            // 1.5 OSM-Fahrwasser-Debug-Layer — zeichnet alle geladenen Fahrwasser-Linien
+            //     als dünne türkise Linien, damit sichtbar wird, WO der Router überhaupt
+            //     echte Fahrwasser-Daten hat (und wo nicht).
+            if (fairwayLoaded) {
+                val loader = com.example.trnberechnung.logic.FairwayLoader
+                val osmWps = loader.extraWaypoints.associateBy { it.id }
+                val drawnEdges = HashSet<Pair<String, String>>(loader.extraEdges.size)
+                for ((a, b) in loader.extraEdges) {
+                    val key = if (a < b) a to b else b to a
+                    if (!drawnEdges.add(key)) continue
+                    // Nur OSM-↔-OSM-Kanten zeichnen (Anbindungen an Basis-WPs auslassen,
+                    // die sind künstliche Konnektoren, kein echtes Fahrwasser).
+                    val wpA = osmWps[a] ?: continue
+                    val wpB = osmWps[b] ?: continue
+                    lm.create(
+                        LineOptions()
+                            .withLatLngs(listOf(LatLng(wpA.lat, wpA.lon), LatLng(wpB.lat, wpB.lon)))
+                            .withLineColor(ColorUtils.colorToRgbaString(AndroidColor.parseColor("#26C6DA")))
+                            .withLineWidth(1.5f)
+                            .withLineOpacity(0.45f)
+                    )
+                }
+                // Schutzzonen als dezenter roter Outline-Polygon
+                for (zone in loader.protectedZones) {
+                    if (zone.size < 3) continue
+                    val ring = zone + zone.first()  // Polygon schließen
+                    lm.create(
+                        LineOptions()
+                            .withLatLngs(ring)
+                            .withLineColor(ColorUtils.colorToRgbaString(AndroidColor.parseColor("#FF5252")))
+                            .withLineWidth(1.2f)
+                            .withLineOpacity(0.35f)
+                    )
+                }
+            }
+
             // 2. Draw Polyline (either segmented or single) — Mockup-Stil:
             //    Grün (NauticalPrimary) für sicher, Amber für kritisch, Rot für No-Go.
             if (routeSegments.isNotEmpty()) {
