@@ -90,12 +90,12 @@ object FairwayLoader {
         val files = try {
             assets.list(ASSETS_DIR).orEmpty().filter { it.endsWith(".geojson") }
         } catch (e: Exception) {
-            Log.w(TAG, "Cannot list assets/$ASSETS_DIR", e)
+            RouterLog.w(TAG, "Cannot list assets/$ASSETS_DIR", e)
             return
         }
 
         if (files.isEmpty()) {
-            Log.i(TAG, "No GeoJSON files in assets/$ASSETS_DIR — using base graph only")
+            RouterLog.i(TAG, "No GeoJSON files in assets/$ASSETS_DIR — using base graph only")
             return
         }
 
@@ -105,7 +105,7 @@ object FairwayLoader {
                 val json = assets.open("$ASSETS_DIR/$file").bufferedReader().use { it.readText() }
                 featuresParsed += parseFeatureCollection(json)
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to parse $file", e)
+                RouterLog.w(TAG, "Failed to parse $file", e)
             }
         }
 
@@ -113,7 +113,7 @@ object FairwayLoader {
         connectEndpointsToBaseGraph()
 
         _isLoaded.value = featuresParsed > 0
-        Log.i(TAG, "Loaded $featuresParsed features → ${_extraWaypoints.size} WPs, " +
+        RouterLog.i(TAG, "Loaded $featuresParsed features → ${_extraWaypoints.size} WPs, " +
                 "${_extraEdges.size} edges, ${_protectedZones.size} zones")
     }
 
@@ -332,13 +332,13 @@ object FairwayLoader {
         }
 
         if (buoys.size < 4) {
-            Log.i(TAG, "Buoy chains: only ${buoys.size} lateral buoys in bbox — skipping")
+            RouterLog.i(TAG, "Buoy chains: only ${buoys.size} lateral buoys in bbox — skipping")
             return 0
         }
 
         val reds = buoys.filter { it.isRed }
         val greens = buoys.filter { !it.isRed }
-        Log.d(TAG, "Buoy chains: ${reds.size} red + ${greens.size} green in bbox")
+        RouterLog.d(TAG, "Buoy chains: ${reds.size} red + ${greens.size} green in bbox")
 
         // ── (1) Paarung: jede rote Tonne mit nächster grüner in ≤ 500 m ──
         // 0.005° ≈ 555 m bei 53,7° N — ausreichend für schmale Pricken-Pfade.
@@ -369,7 +369,7 @@ object FairwayLoader {
             }
         }
 
-        Log.d(TAG, "Buoy chains: ${midpoints.size} pairs → channel midpoints")
+        RouterLog.d(TAG, "Buoy chains: ${midpoints.size} pairs → channel midpoints")
         if (midpoints.size < 2) return 0
 
         // ── (2) Midpoints als Waypoints hinzufügen ──
@@ -407,7 +407,7 @@ object FairwayLoader {
             }
         }
 
-        Log.i(TAG, "Buoy chains: ${midpoints.size} WPs, $edgeCount edges added to graph")
+        RouterLog.i(TAG, "Buoy chains: ${midpoints.size} WPs, $edgeCount edges added to graph")
         // Wir zählen die Pricken-Kette einmal als ein "Feature", damit isLoaded triggert.
         return if (midpoints.isNotEmpty()) 1 else 0
     }

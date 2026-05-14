@@ -409,8 +409,8 @@ object NauticalRouter {
         val startWP = findNearest(start)
         val endWP = findNearest(end)
 
-        Log.d(TAG, "Routing: start=(${start.latitude},${start.longitude}) → nearest=${startWP.id} (${startWP.lat},${startWP.lon})")
-        Log.d(TAG, "Routing: end=(${end.latitude},${end.longitude}) → nearest=${endWP.id} (${endWP.lat},${endWP.lon})")
+        RouterLog.d(TAG, "Routing: start=(${start.latitude},${start.longitude}) → nearest=${startWP.id} (${startWP.lat},${startWP.lon})")
+        RouterLog.d(TAG, "Routing: end=(${end.latitude},${end.longitude}) → nearest=${endWP.id} (${endWP.lat},${endWP.lon})")
 
         val pathIds = if (startWP.id == endWP.id) listOf(startWP.id) else dijkstra(startWP.id, endWP.id)
         val wpMap = waypointMap  // einmal snapshotten
@@ -418,9 +418,9 @@ object NauticalRouter {
         val isFallback = pathIds.size == 2 && pathIds.first() == startWP.id && pathIds.last() == endWP.id &&
                          adjacency[startWP.id]?.contains(endWP.id) != true
         if (isFallback) {
-            Log.w(TAG, "Routing: NO PATH FOUND in graph between ${startWP.id} and ${endWP.id} — falling back to straight line (the polyline will cross land).")
+            RouterLog.w(TAG, "Routing: NO PATH FOUND in graph between ${startWP.id} and ${endWP.id} — falling back to straight line (the polyline will cross land).")
         } else {
-            Log.d(TAG, "Routing: path = ${pathIds.joinToString(" → ")}")
+            RouterLog.d(TAG, "Routing: path = ${pathIds.joinToString(" → ")}")
         }
 
         val segments = mutableListOf<RouteSegment>()
