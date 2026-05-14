@@ -2,6 +2,8 @@ package com.example.trnberechnung.logic
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONObject
 import org.maplibre.android.geometry.LatLng
 
@@ -63,10 +65,16 @@ object FairwayLoader {
     /** Aus GeoJSON erzeugte Schutzzonen (Nationalpark-Zone-1 etc.). */
     val protectedZones: List<List<LatLng>> get() = _protectedZones
 
-    /** True nach erfolgreichem [load] mit mindestens einem geparsten Feature. */
-    @Volatile
-    var isLoaded: Boolean = false
-        private set
+    /**
+     * True, sobald [load] mindestens ein Feature erfolgreich geparst hat.
+     * `StateFlow`, damit Compose-UI reaktiv darauf hören kann
+     * (z.B. das Peildaten-Banner in der MapScreen).
+     */
+    private val _isLoaded = MutableStateFlow(false)
+    val isLoadedFlow: StateFlow<Boolean> = _isLoaded
+
+    /** Bequemer synchroner Snapshot. Für reaktive UIs [isLoadedFlow] bevorzugen. */
+    val isLoaded: Boolean get() = _isLoaded.value
 
     /**
      * Lädt alle `*.geojson`-Dateien aus `assets/fairways/`. Idempotent:
@@ -76,7 +84,7 @@ object FairwayLoader {
         _extraWaypoints.clear()
         _extraEdges.clear()
         _protectedZones.clear()
-        isLoaded = false
+        _isLoaded.value = false
 
         val assets = context.assets
         val files = try {
@@ -104,10 +112,37 @@ object FairwayLoader {
         // Anbindung der Fahrwasser-Endpunkte an den Basisgraphen
         connectEndpointsToBaseGraph()
 
-        isLoaded = featuresParsed > 0
+        _isLoaded.value = featuresParsed > 0
         Log.i(TAG, "Loaded $featuresParsed features → ${_extraWaypoints.size} WPs, " +
                 "${_extraEdges.size} edges, ${_protectedZones.size} zones")
     }
+
+    // ── Whitelists für typensensitives Parsing ──────────────────────────
+    /**
+     * Welche LineString-`seamark:type`-Werte werden als befahrbare Fahrwasser
+     * akzeptiert. Andere Linien (Kabel, Pipelines, Brücken, Küstenlinien)
+     * werden ignoriert.
+     */
+    private val FAIRWAY_SEAMARKS = setOf(
+        "fairway",
+        "navigation_line",
+        "recommended_track",
+        "recommended_traffic_lane",
+        "ferry_route",
+        "separation_lane"
+    )
+
+    /**
+     * Welche Polygon-`seamark:type`-Werte werden als Sperrzone (Routing-No-Go)
+     * behandelt. Schutzgebiete + Nationalpark-Zonen werden zusätzlich über
+     * `protect_class` oder `boundary=protected_area` erkannt.
+     */
+    private val PROTECTED_SEAMARKS = setOf(
+        "restricted_area",
+        "dumping_ground",
+        "military_area",
+        "production_area"
+    )
 
     /** Parst eine GeoJSON FeatureCollection. Liefert die Anzahl gelesener Features. */
     private fun parseFeatureCollection(json: String): Int {
@@ -124,17 +159,43 @@ object FairwayLoader {
             when (geom.optString("type")) {
                 "LineString" -> if (parseFairway(geom, props)) count++
                 "Polygon"    -> if (parseZone(geom, props)) count++
+                "MultiPolygon" -> if (parseMultiPolygonZone(geom, props)) count++
             }
         }
         return count
     }
 
+    /** Kürzt OSM-Pfad-IDs (`way/1234567`) zu kompakten Kennungen. */
+    private fun deriveFairwayId(props: JSONObject): String {
+        val rawId = props.optString("@id").ifBlank { props.optString("id") }
+        if (rawId.isNotBlank()) {
+            return rawId.replace("/", "_")
+        }
+        return props.optString("seamark:type").ifBlank { "fw" } + "_${_extraWaypoints.size}"
+    }
+
+    /** Liest aus OSM-Tags eine plausible Mindesttiefe. Default: 1 m. */
+    private fun deriveMinDepth(props: JSONObject): Double {
+        // OSM-Tags `seamark:depth`, `seamark:fairway:depth`, `depth`
+        return props.optDouble("seamark:fairway:depth", Double.NaN)
+            .takeIf { !it.isNaN() }
+            ?: props.optDouble("seamark:depth", Double.NaN).takeIf { !it.isNaN() }
+            ?: props.optDouble("depth", Double.NaN).takeIf { !it.isNaN() }
+            ?: 1.0
+    }
+
     private fun parseFairway(geom: JSONObject, props: JSONObject): Boolean {
+        // Nur seamark-Linien, die wir als Fahrwasser akzeptieren.
+        // Schemas: entweder unser eigenes (`properties.id` + `minDepth`) oder OSM (`seamark:type`).
+        val seamark = props.optString("seamark:type")
+        val isOwnFormat = props.has("id") && props.has("minDepth")
+        if (!isOwnFormat && seamark !in FAIRWAY_SEAMARKS) return false
+
         val coords = geom.optJSONArray("coordinates") ?: return false
         if (coords.length() < 2) return false
 
-        val id = props.optString("id").ifBlank { "fw_${_extraWaypoints.size}" }
-        val minDepth = props.optDouble("minDepth", 1.0)
+        val id = if (isOwnFormat) props.optString("id") else deriveFairwayId(props)
+        val minDepth = if (isOwnFormat) props.optDouble("minDepth", 1.0) else deriveMinDepth(props)
 
         val newWpIds = mutableListOf<String>()
         for (j in 0 until coords.length()) {
@@ -153,7 +214,22 @@ object FairwayLoader {
         return true
     }
 
+    /** True, wenn ein Polygon-Feature als Sperrzone behandelt werden soll. */
+    private fun isProtectedPolygon(props: JSONObject): Boolean {
+        // Eigenes Format
+        if (props.optString("zone").isNotBlank()) return true
+        // OSM-Whitelist
+        if (props.optString("seamark:type") in PROTECTED_SEAMARKS) return true
+        // Allgemeine Schutzgebiet-Tags
+        if (props.has("protect_class")) return true
+        if (props.optString("boundary") == "protected_area") return true
+        if (props.optString("leisure") == "nature_reserve") return true
+        return false
+    }
+
     private fun parseZone(geom: JSONObject, props: JSONObject): Boolean {
+        if (!isProtectedPolygon(props)) return false
+
         // Nur äußerer Ring (erstes Element von coordinates)
         val rings = geom.optJSONArray("coordinates") ?: return false
         val outer = rings.optJSONArray(0) ?: return false
@@ -168,6 +244,29 @@ object FairwayLoader {
         }
         _protectedZones += polygon
         return true
+    }
+
+    /** MultiPolygon = mehrere Ringe; jeder äußere Ring wird als eigene Zone aufgenommen. */
+    private fun parseMultiPolygonZone(geom: JSONObject, props: JSONObject): Boolean {
+        if (!isProtectedPolygon(props)) return false
+
+        val polygons = geom.optJSONArray("coordinates") ?: return false
+        var added = false
+        for (p in 0 until polygons.length()) {
+            val rings = polygons.optJSONArray(p) ?: continue
+            val outer = rings.optJSONArray(0) ?: continue
+            if (outer.length() < 3) continue
+            val polygon = mutableListOf<LatLng>()
+            for (j in 0 until outer.length()) {
+                val pt = outer.optJSONArray(j) ?: continue
+                val lon = pt.optDouble(0)
+                val lat = pt.optDouble(1)
+                polygon += LatLng(lat, lon)
+            }
+            _protectedZones += polygon
+            added = true
+        }
+        return added
     }
 
     /**

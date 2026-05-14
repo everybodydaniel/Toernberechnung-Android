@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -102,6 +103,8 @@ fun MapScreen(
 
     var mapError by remember { mutableStateOf<String?>(null) }
     val mapState = remember { MapState() }
+    // Reaktive Beobachtung des FairwayLoader-Status (Peildaten-Banner)
+    val fairwayLoaded by com.example.trnberechnung.logic.FairwayLoader.isLoadedFlow.collectAsState()
 
     if (mapError != null) {
         // Error fallback
@@ -490,7 +493,7 @@ fun MapScreen(
 
         // Peildaten-Banner — sichtbar sobald GeoJSON-Fahrwasser/Schutzzonen geladen sind.
         // Entspricht dem Mockup-Hinweis „PEILDATEN & TIDE-BERECHNUNG AKTUALISIERT & VERWENDET".
-        if (com.example.trnberechnung.logic.FairwayLoader.isLoaded) {
+        if (fairwayLoaded) {
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)

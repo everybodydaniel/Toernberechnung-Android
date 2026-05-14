@@ -12,7 +12,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -39,8 +42,13 @@ class MainActivity : ComponentActivity() {
         // MapLibre global init
         MapLibre.getInstance(applicationContext)
 
-        // Fahrwasser- & Schutzzonen-Daten laden, bevor der Router das erste Mal läuft
-        FairwayLoader.load(applicationContext)
+        // Fahrwasser- & Schutzzonen-Daten asynchron laden (9 MB OSM-Export würde
+        // bei synchronem Parse den App-Start blockieren). Solange [FairwayLoader.isLoaded]
+        // false ist, fällt der Router sauber auf den Basisgraphen zurück und das
+        // Peildaten-Banner bleibt versteckt — sobald fertig, springt es an.
+        lifecycleScope.launch(Dispatchers.IO) {
+            FairwayLoader.load(applicationContext)
+        }
 
         enableEdgeToEdge()
 
