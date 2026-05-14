@@ -311,18 +311,20 @@ object NauticalRouter {
         "whv_fairway" to "jade_whv_appr",
         "dangast_hbr" to "jade_dangast_a",
 
-        // ── Leybucht-Verbinder (Ems ↔ Norddeich) ──
-        // Pfad jetzt: ems → leybucht → Watt-Brücke (watt_west_norddeich) → Norddeich.
-        // Vor dem Fix ging "leybucht_coast → norddeich_appr" direkt durch Norden-Stadt.
+        // ── Leybucht (Sackgasse) + Norddeich-Anlauf ──
+        // KEINE direkte Verbindung Leybucht↔Norddeich mehr — diese Strecke
+        // würde quer durch die Krummhörn-Halbinsel führen. Boote von Emden
+        // nach Norderney/Baltrum gehen entweder offshore via Borkum oder
+        // durch das Pricken-Netz im Riffgat.
         "ems_pilsum" to "leybucht_w",
         "ems_leybuchtn" to "leybucht_w",
         "leybucht_w" to "leybucht_e",
         "leybucht_e" to "leybucht_coast",
-        "leybucht_coast" to "watt_west_norddeich",
-        "watt_west_norddeich" to "norddeich_appr",
-        "watt_west_norddeich" to "norddeich_hbr",
+        // Norddeich-Hafen-Anlauf (eigener Cluster, jetzt nur über Busetief erreichbar)
         "norddeich_appr" to "norddeich_off",
         "norddeich_appr" to "norddeich_hbr",
+        "watt_west_norddeich" to "norddeich_appr",
+        "watt_west_norddeich" to "norddeich_hbr",
 
         // ── Reserve-W-Kette + Osterems-Kette ──
         "W1" to "W2", "W2" to "W3", "W3" to "W4", "W4" to "W5", "W5" to "W6",
