@@ -340,9 +340,10 @@ object FairwayLoader {
         val greens = buoys.filter { !it.isRed }
         RouterLog.d(TAG, "Buoy chains: ${reds.size} red + ${greens.size} green in bbox")
 
-        // ── (1) Paarung: jede rote Tonne mit nächster grüner in ≤ 500 m ──
-        // 0.005° ≈ 555 m bei 53,7° N — ausreichend für schmale Pricken-Pfade.
-        val maxPairDistDeg = 0.005
+        // ── (1) Paarung: jede rote Tonne mit nächster grüner in ≤ ~890 m ──
+        // Vorher 0.005° (555 m) → Pairing-Quote war nur 12,8 %.
+        // 0.008° fängt deutlich mehr breitere Fahrwasser (Ems, Außenems).
+        val maxPairDistDeg = 0.008
         val maxPairDistSq = maxPairDistDeg * maxPairDistDeg
         val usedGreen = BooleanArray(greens.size)
         data class Midpoint(val lat: Double, val lon: Double)
@@ -382,10 +383,12 @@ object FairwayLoader {
         }
 
         // ── (3) Verknüpfung: jeder Midpoint zu seinen K nächsten Nachbarn ──
-        // 0.008° ≈ 890 m. K=3, damit das Netz auch bei Verzweigungen zusammenhängt.
-        val maxLinkDistDeg = 0.008
+        // Vorher 0.008° → nur 97/154 Edges (1,26 pro Knoten = fast Singletons).
+        // 0.020° (~2,2 km) verbindet aufeinanderfolgende Pricken einer Fahrwasser-
+        // Linie auch dann, wenn der nächste Pair-Match weiter weg liegt.
+        val maxLinkDistDeg = 0.020
         val maxLinkDistSq = maxLinkDistDeg * maxLinkDistDeg
-        val K = 3
+        val K = 4
         var edgeCount = 0
         for (i in midpoints.indices) {
             val a = midpoints[i]
@@ -424,43 +427,79 @@ object FairwayLoader {
      *    Einstieg ins Pricken-Netz.
      */
     private fun connectEndpointsToBaseGraph() {
-        val maxDistDeg = 0.012  // ~0,7 sm
-        val maxDistSq = maxDistDeg * maxDistDeg
+        // Fairway-Endpunkte: ≤ 0.012° (~0,7 sm) wie zuvor.
+        // Pricken: 0.025° (~2,8 km) — bei groben Basis-WPs würden engere Werte
+        // dazu führen, dass die Pricken isoliert hängen und der Router sie
+        // nie nutzt (genau das Problem im letzten Test-Log).
+        val maxFairwayDistDeg = 0.012
+        val maxFairwayDistSq = maxFairwayDistDeg * maxFairwayDistDeg
+        val maxPrickenDistDeg = 0.025
+        val maxPrickenDistSq = maxPrickenDistDeg * maxPrickenDistDeg
+
         val baseList = NauticalRouter.baseWaypointsForLoader()
         if (baseList.isEmpty()) return
 
         val (pricken, fairwayWps) = _extraWaypoints.partition { it.id.startsWith("pricken_") }
 
         // Fahrwasser-LineStrings: nur Endpunkte pro Gruppe (Linie)
+        var fairwayConnects = 0
         val groups = fairwayWps.groupBy { it.id.substringBeforeLast('_') }
         for ((_, members) in groups) {
             val endpoints = listOfNotNull(members.firstOrNull(), members.lastOrNull()).distinct()
             for (endpoint in endpoints) {
-                connectIfClose(endpoint, baseList, maxDistSq)
+                if (connectIfClose(endpoint, baseList, maxFairwayDistSq)) fairwayConnects++
             }
         }
 
-        // Pricken-Netz: jeder Mittelpunkt einzeln. Bei vielen Pricken (1000+)
-        // ist das O(N×M), aber M (≈100 base WPs) hält's überschaubar.
+        // Pricken-Netz: jeder Mittelpunkt einzeln. K=2 nächste Basis-WPs,
+        // damit pro Pricken auch ein zweiter Einstieg (z.B. Hafen + Watt-Knoten)
+        // entstehen kann.
+        var prickenConnects = 0
         for (wp in pricken) {
-            connectIfClose(wp, baseList, maxDistSq)
+            prickenConnects += connectKClosest(wp, baseList, maxPrickenDistSq, k = 2)
         }
+
+        RouterLog.d(TAG, "Base-graph attachment: fairway=$fairwayConnects, pricken=$prickenConnects")
     }
 
+    /** Verbindet [wp] mit dem nächsten Basis-WP innerhalb [maxDistSq]. Liefert true bei Erfolg. */
     private fun connectIfClose(
         wp: NauticalRouter.WP,
         baseList: List<NauticalRouter.WP>,
         maxDistSq: Double
-    ) {
+    ): Boolean {
         val nearest = baseList.minByOrNull { b ->
             val dLat = b.lat - wp.lat
             val dLon = b.lon - wp.lon
             dLat * dLat + dLon * dLon
-        } ?: return
+        } ?: return false
         val dLat = nearest.lat - wp.lat
         val dLon = nearest.lon - wp.lon
         if (dLat * dLat + dLon * dLon <= maxDistSq) {
             _extraEdges += wp.id to nearest.id
+            return true
         }
+        return false
+    }
+
+    /** Verbindet [wp] mit den K nächsten Basis-WPs innerhalb [maxDistSq]. Liefert Anzahl erfolgreicher Verknüpfungen. */
+    private fun connectKClosest(
+        wp: NauticalRouter.WP,
+        baseList: List<NauticalRouter.WP>,
+        maxDistSq: Double,
+        k: Int
+    ): Int {
+        val candidates = baseList.mapNotNull { b ->
+            val dLat = b.lat - wp.lat
+            val dLon = b.lon - wp.lon
+            val sq = dLat * dLat + dLon * dLon
+            if (sq <= maxDistSq) b to sq else null
+        }.sortedBy { it.second }
+        var count = 0
+        for ((b, _) in candidates.take(k)) {
+            _extraEdges += wp.id to b.id
+            count++
+        }
+        return count
     }
 }

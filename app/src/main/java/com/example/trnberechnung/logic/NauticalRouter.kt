@@ -69,7 +69,7 @@ object NauticalRouter {
 
         // === BUSETIEF (Norddeich ↔ Norderney) ===
         // (norderney_s wird im Insel-Anlauf-Block weiter unten definiert)
-        WP("norddeich_off",   53.617, 7.162, 3.0),
+        WP("norddeich_off",   53.640, 7.165, 3.0),  // ins Watt nördlich der Mole verschoben
         WP("busetief_s",      53.635, 7.160, 2.5),
         WP("busetief_mid",    53.652, 7.162, 2.0),
         WP("busetief_n",      53.670, 7.165, 2.0),
@@ -115,10 +115,14 @@ object NauticalRouter {
         WP("seegat_wangerooge", 53.800, 8.020, 4.0),  // Blaue Balje
 
         // === LEYBUCHT (Ems ↔ Norddeich) ===
+        // Vor dem Fix lagen leybucht_coast/norddeich_appr auf dem Festland
+        // (Norden-Stadtgebiet) — Route verlief sichtbar quer durch Land.
+        // Korrigierte Koordinaten: alle Punkte jetzt im offenen Watt.
         WP("leybucht_w",      53.530, 6.920, 2.0),
-        WP("leybucht_e",      53.560, 7.020, 1.5),
-        WP("leybucht_coast",  53.590, 7.100, 1.0),
-        WP("norddeich_appr",  53.610, 7.140, 2.0),
+        WP("leybucht_e",      53.555, 7.010, 1.5),  // Leybucht-Ostausgang (etwas südlicher)
+        WP("leybucht_coast",  53.555, 7.080, 1.0),  // im Watt nördlich der Leybucht
+        WP("watt_west_norddeich", 53.628, 7.110, 1.5), // NEU: Watt-Brücke westlich Norddeich
+        WP("norddeich_appr",  53.632, 7.150, 2.0),  // NW der Mole, klar im Wasser
 
         // === HAFEN-WAYPOINTS — 1:1 mit TideViewModel.LOCAL_HARBOURS ===
         WP("borkum_hbr",      53.5572, 6.7525, 4.0),
@@ -308,12 +312,17 @@ object NauticalRouter {
         "dangast_hbr" to "jade_dangast_a",
 
         // ── Leybucht-Verbinder (Ems ↔ Norddeich) ──
+        // Pfad jetzt: ems → leybucht → Watt-Brücke (watt_west_norddeich) → Norddeich.
+        // Vor dem Fix ging "leybucht_coast → norddeich_appr" direkt durch Norden-Stadt.
         "ems_pilsum" to "leybucht_w",
         "ems_leybuchtn" to "leybucht_w",
         "leybucht_w" to "leybucht_e",
         "leybucht_e" to "leybucht_coast",
-        "leybucht_coast" to "norddeich_appr",
+        "leybucht_coast" to "watt_west_norddeich",
+        "watt_west_norddeich" to "norddeich_appr",
+        "watt_west_norddeich" to "norddeich_hbr",
         "norddeich_appr" to "norddeich_off",
+        "norddeich_appr" to "norddeich_hbr",
 
         // ── Reserve-W-Kette + Osterems-Kette ──
         "W1" to "W2", "W2" to "W3", "W3" to "W4", "W4" to "W5", "W5" to "W6",
