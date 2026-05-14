@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -13,6 +14,9 @@ interface LogbookDao {
 
     @Insert
     suspend fun insertLog(log: LogbookEntry)
+
+    @Update
+    suspend fun updateLog(log: LogbookEntry)
 
     @Delete
     suspend fun deleteLog(log: LogbookEntry)

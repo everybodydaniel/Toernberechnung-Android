@@ -325,6 +325,10 @@ class TideViewModel(
         viewModelScope.launch { repository.insertLog(log) }
     }
 
+    fun updateLog(log: LogbookEntry) {
+        viewModelScope.launch { repository.updateLog(log) }
+    }
+
     fun deleteLog(log: LogbookEntry) {
         viewModelScope.launch { repository.deleteLog(log) }
     }

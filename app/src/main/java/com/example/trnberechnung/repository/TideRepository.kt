@@ -79,6 +79,10 @@ class TideRepository(
         logbookDao.insertLog(log)
     }
 
+    suspend fun updateLog(log: LogbookEntry) {
+        logbookDao.updateLog(log)
+    }
+
     suspend fun deleteLog(log: LogbookEntry) {
         logbookDao.deleteLog(log)
     }

@@ -18,6 +18,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.room.Room
 import com.example.trnberechnung.database.AppDatabase
+import com.example.trnberechnung.logic.FairwayLoader
 import com.example.trnberechnung.repository.TideRepository
 import com.example.trnberechnung.ui.CalculatorScreen
 import com.example.trnberechnung.ui.MapScreen
@@ -37,7 +38,10 @@ class MainActivity : ComponentActivity() {
         
         // MapLibre global init
         MapLibre.getInstance(applicationContext)
-        
+
+        // Fahrwasser- & Schutzzonen-Daten laden, bevor der Router das erste Mal läuft
+        FairwayLoader.load(applicationContext)
+
         enableEdgeToEdge()
 
         val db = Room.databaseBuilder(

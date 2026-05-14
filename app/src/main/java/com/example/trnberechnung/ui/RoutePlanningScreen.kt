@@ -324,7 +324,7 @@ fun RoutePlanningScreen(viewModel: TideViewModel, routeViewModel: RoutePlanningV
                                 color = NauticalTextSecondary
                             )
                             Text(
-                                routeUiState.departureTime.format(DateTimeFormatter.ofPattern("EEE, dd. MMM - HH:mm", Locale.GERMANY)),
+                                routeUiState.departureTime.format(DateTimeFormatter.ofPattern("EEE, dd. MMM · HH:mm", Locale.GERMANY)),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = NauticalPrimary,
                                 fontWeight = FontWeight.Bold
@@ -333,16 +333,30 @@ fun RoutePlanningScreen(viewModel: TideViewModel, routeViewModel: RoutePlanningV
 
                         Button(
                             onClick = {
-                                val time = routeUiState.departureTime
-                                TimePickerDialog(
+                                val current = routeUiState.departureTime
+                                // Zuerst Datum, dann (sequenziell) Uhrzeit wählen
+                                android.app.DatePickerDialog(
                                     context,
-                                    { _, hour, minute ->
-                                        val newTime = time.withHour(hour).withMinute(minute)
-                                        routeViewModel.updateDepartureTime(newTime, tideEvents)
+                                    { _, year, month, day ->
+                                        TimePickerDialog(
+                                            context,
+                                            { _, hour, minute ->
+                                                val newTime = current
+                                                    .withYear(year)
+                                                    .withMonth(month + 1)  // DatePicker: 0-basiert
+                                                    .withDayOfMonth(day)
+                                                    .withHour(hour)
+                                                    .withMinute(minute)
+                                                routeViewModel.updateDepartureTime(newTime, tideEvents)
+                                            },
+                                            current.hour,
+                                            current.minute,
+                                            true
+                                        ).show()
                                     },
-                                    time.hour,
-                                    time.minute,
-                                    true
+                                    current.year,
+                                    current.monthValue - 1,
+                                    current.dayOfMonth
                                 ).show()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = NauticalPrimary),

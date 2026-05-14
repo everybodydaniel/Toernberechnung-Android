@@ -240,27 +240,28 @@ fun MapScreen(
                 )
             }
 
-            // 2. Draw Polyline (either segmented or single)
+            // 2. Draw Polyline (either segmented or single) — Mockup-Stil:
+            //    Grün (NauticalPrimary) für sicher, Amber für kritisch, Rot für No-Go.
             if (routeSegments.isNotEmpty()) {
                 routeSegments.forEach { segment ->
                     val color = when (segment.type) {
-                        com.example.trnberechnung.model.SegmentType.SAFE -> "#007AFF"    // Blue
-                        com.example.trnberechnung.model.SegmentType.CRITICAL -> "#FF9500" // Orange
-                        com.example.trnberechnung.model.SegmentType.NO_GO -> "#FF3B30"    // Red
+                        com.example.trnberechnung.model.SegmentType.SAFE -> "#00BFA6"    // Teal-Grün
+                        com.example.trnberechnung.model.SegmentType.CRITICAL -> "#FFB74D" // Amber
+                        com.example.trnberechnung.model.SegmentType.NO_GO -> "#FF5252"    // Rot
                     }
                     lm.create(
                         LineOptions()
                             .withLatLngs(segment.points)
                             .withLineColor(ColorUtils.colorToRgbaString(AndroidColor.parseColor(color)))
-                            .withLineWidth(4f)
+                            .withLineWidth(5f)
                     )
                 }
             } else if (routePoints.size >= 2) {
                 lm.create(
                     LineOptions()
                         .withLatLngs(routePoints)
-                        .withLineColor(ColorUtils.colorToRgbaString(AndroidColor.parseColor("#007AFF")))
-                        .withLineWidth(4f)
+                        .withLineColor(ColorUtils.colorToRgbaString(AndroidColor.parseColor("#00BFA6")))
+                        .withLineWidth(5f)
                 )
             }
 
@@ -470,6 +471,31 @@ fun MapScreen(
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        // Peildaten-Banner — sichtbar sobald GeoJSON-Fahrwasser/Schutzzonen geladen sind.
+        // Entspricht dem Mockup-Hinweis „PEILDATEN & TIDE-BERECHNUNG AKTUALISIERT & VERWENDET".
+        if (com.example.trnberechnung.logic.FairwayLoader.isLoaded) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 12.dp, start = 60.dp, end = 60.dp)
+                    .shadow(4.dp, RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xCC0D1B2A))  // NauticalBackground mit Alpha
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.material3.Text("📍", fontSize = 11.sp)
+                Spacer(modifier = Modifier.width(6.dp))
+                androidx.compose.material3.Text(
+                    "PEILDATEN & TIDE-BERECHNUNG AKTUALISIERT & VERWENDET.",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    letterSpacing = 0.5.sp
+                )
+            }
+        }
 
         // Zoom Controls
         Column(

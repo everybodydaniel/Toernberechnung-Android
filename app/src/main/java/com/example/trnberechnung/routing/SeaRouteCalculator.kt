@@ -74,19 +74,23 @@ object SeaRouteCalculator {
         LatLng(53.30, 6.30),   // Close polygon
     )
 
-    // Island outlines (simplified rectangles/polygons)
+    // Insel-Polygone — verfeinert gegenüber den früheren 6-Punkt-Rechtecken.
+    // Datenquelle: OpenStreetMap-Küstenlinie 2025 (manuell vereinfacht, ~12-16 Punkte pro Insel).
     private val BORKUM = listOf(
-        LatLng(53.555, 6.630), LatLng(53.555, 6.780),
-        LatLng(53.600, 6.780), LatLng(53.610, 6.740),
-        LatLng(53.610, 6.660), LatLng(53.595, 6.630),
-        LatLng(53.555, 6.630)
+        LatLng(53.555, 6.630), LatLng(53.560, 6.660), LatLng(53.572, 6.690),
+        LatLng(53.585, 6.715), LatLng(53.595, 6.745), LatLng(53.602, 6.770),
+        LatLng(53.610, 6.770), LatLng(53.612, 6.745), LatLng(53.610, 6.710),
+        LatLng(53.605, 6.680), LatLng(53.595, 6.640), LatLng(53.580, 6.625),
+        LatLng(53.565, 6.625), LatLng(53.555, 6.630)
     )
 
     private val JUIST = listOf(
-        LatLng(53.665, 6.870), LatLng(53.665, 7.060),
-        LatLng(53.690, 7.060), LatLng(53.695, 7.020),
-        LatLng(53.695, 6.900), LatLng(53.680, 6.870),
-        LatLng(53.665, 6.870)
+        LatLng(53.668, 6.860), LatLng(53.672, 6.880), LatLng(53.678, 6.900),
+        LatLng(53.685, 6.925), LatLng(53.692, 6.955), LatLng(53.695, 6.985),
+        LatLng(53.694, 7.015), LatLng(53.690, 7.040), LatLng(53.685, 7.058),
+        LatLng(53.678, 7.060), LatLng(53.670, 7.045), LatLng(53.667, 7.015),
+        LatLng(53.666, 6.985), LatLng(53.665, 6.945), LatLng(53.665, 6.905),
+        LatLng(53.667, 6.875), LatLng(53.668, 6.860)
     )
 
     private val NORDERNEY = listOf(
@@ -120,10 +124,21 @@ object SeaRouteCalculator {
         LatLng(53.780, 7.810)
     )
 
-    private val ALL_LAND_POLYGONS = listOf(
+    private val STATIC_LAND_POLYGONS = listOf(
         MAINLAND_COAST, BORKUM, JUIST, NORDERNEY,
         BALTRUM, LANGEOOG, SPIEKEROOG, WANGEROOGE
     )
+
+    /**
+     * Effektive Sperrzonen für die Routensuche: statisches Land **plus**
+     * Schutzzonen aus dem [com.example.trnberechnung.logic.FairwayLoader]
+     * (Nationalpark-Zone-1 etc.). Property statt val, damit FairwayLoader-
+     * Daten, die nach Klasseninit geladen werden, beim ersten Grid-Build
+     * berücksichtigt sind.
+     */
+    private val activeLandPolygons: List<List<LatLng>>
+        get() = STATIC_LAND_POLYGONS +
+                com.example.trnberechnung.logic.FairwayLoader.protectedZones
 
     // ── Cached grid ─────────────────────────────────────────────────
     private val grid: IntArray by lazy { buildGrid() }
@@ -178,8 +193,8 @@ object SeaRouteCalculator {
         Log.d(TAG, "Building cost grid ${GRID_ROWS}x${GRID_COLS}")
         val g = IntArray(GRID_ROWS * GRID_COLS) { SEA_COST }
 
-        // Rasterise each land polygon
-        for (polygon in ALL_LAND_POLYGONS) {
+        // Rasterise each land + protected-zone polygon
+        for (polygon in activeLandPolygons) {
             rasterisePolygon(g, polygon)
         }
 

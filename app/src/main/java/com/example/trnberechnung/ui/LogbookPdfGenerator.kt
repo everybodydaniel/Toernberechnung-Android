@@ -57,17 +57,17 @@ object LogbookPdfGenerator {
     fun generate(context: Context, log: LogbookEntry) {
         try {
             val bp = BoatProfileRepository(context)
-            val d = parseLogDetails(log.details)
+            val details = LogbookDetails.parse(log.details)
             val doc = PdfDocument()
             val page = doc.startPage(PdfDocument.PageInfo.Builder(PW, PH, 1).create())
             val c = page.canvas
 
             var y = M
             y = drawTitle(c, y, log)
-            y = drawTripInfoBlock(c, y, log, d, bp)
-            y = drawChecklist(c, y)
-            y = drawWaypointTable(c, y, log, d)
-            y = drawEvents(c, y)
+            y = drawTripInfoBlock(c, y, log, details, bp)
+            y = drawChecklist(c, y, details)
+            y = drawWaypointTable(c, y, log, details)
+            y = drawEvents(c, y, details)
             y = drawFooter(c, y)
 
             doc.finishPage(page)
@@ -102,7 +102,7 @@ object LogbookPdfGenerator {
     // ══════════════════════════════════════════════════
     private fun drawTripInfoBlock(
         c: Canvas, startY: Float, log: LogbookEntry,
-        d: Map<String, String>, bp: BoatProfileRepository
+        d: LogbookDetails, bp: BoatProfileRepository
     ): Float {
         var y = startY
         val rh = 28f  // row height
@@ -112,12 +112,15 @@ object LogbookPdfGenerator {
         val routeParts = log.routeDesc.split("→", "->", "➔", "nach").map { it.trim() }
         val from = routeParts.firstOrNull() ?: "–"
         val to = routeParts.getOrNull(1) ?: "–"
-        val crew = d["crew"] ?: "–"
+        val crew = d.crew.ifBlank { "–" }
         val skipper = crew.split(",").firstOrNull()?.trim()?.split("(")?.firstOrNull()?.trim() ?: "–"
-        val wx = d["wetter"] ?: "–"
-        val tide = d["gezeiten"] ?: "–"
-        val wt = d["wt"] ?: "–"
-        val ukc = d["ukc"] ?: "–"
+        val wx = d.wetter.ifBlank { "–" }
+        val tide = d.gezeiten.ifBlank { "–" }
+        val wt = d.wt.ifBlank { "–" }
+        val ukc = d.ukc.ifBlank { "–" }
+        val aufbHoehe = if (d.aufbauhoeheActive && d.aufbauhoehe.isNotBlank()) d.aufbauhoehe else "–"
+        val bsA = d.bsAbfahrt.ifBlank { "–" }
+        val bsB = d.bsAnkunft.ifBlank { "–" }
 
         // Row 1: Törn von/nach | Crew | Zeitzone
         val r1c1 = CW * 0.38f; val r1c2 = CW * 0.30f; val r1c3 = CW * 0.32f
@@ -138,7 +141,9 @@ object LogbookPdfGenerator {
         val bsX = M + r2c1 + r2c2
         c.drawRect(bsX, y, bsX + r2c3, y + rh, brd)
         c.drawText("Betriebsstd. bei Abfahrt:", bsX + 3f, y + 9f, lp)
+        c.drawText(bsA, bsX + r2c3 - 32f, y + 9f, vp)
         c.drawText("bei Ankunft:", bsX + 3f, y + 21f, lp)
+        c.drawText(bsB, bsX + r2c3 - 32f, y + 21f, vp)
         y += rh
 
         // Row 3: Wetter/Wind | Tiefgang | Aufbauhöhe — wider weather cell
@@ -146,7 +151,7 @@ object LogbookPdfGenerator {
         drawCell(c, M, y, r3c1, rh, "Wetter / Wind:", wx.take(45), lp, vp, brd)
         val tiefgang = "%.2f".format(bp.draft)
         drawCell(c, M + r3c1, y, r3c2, rh, "Tiefgang d. Bootes (m):", tiefgang, lp, vp, brd)
-        drawCell(c, M + r3c1 + r3c2, y, r3c3, rh, "Aufbauh\u00F6he (m):", "\u2013", lp, vp, brd)
+        drawCell(c, M + r3c1 + r3c2, y, r3c3, rh, "Aufbauh\u00F6he (m):", aufbHoehe, lp, vp, brd)
         y += rh
 
         // Row 4: Wasserst.-Vorhers. | Tiefgang | (empty)
@@ -162,53 +167,53 @@ object LogbookPdfGenerator {
     // ══════════════════════════════════════════════════
     //  CHECKLIST
     // ══════════════════════════════════════════════════
-    private fun drawChecklist(c: Canvas, startY: Float): Float {
+    private fun drawChecklist(c: Canvas, startY: Float, d: LogbookDetails): Float {
         var y = startY
         val hp = headerPaint()
         val sp = smallPaint()
         val chk = checkPaint()
         val brd = borderPaint()
 
-        // Section header with check mark
         c.drawText("✓  Checkliste vor Abfahrt:", M, y + 9f, hp)
         y += 14f
 
-        val leftItems = listOf(
-            "Einweisung der Crew", "Sicherheitsmittel",
-            "Revierkunde", "Lagemeldung",
-            "UKW-Funkgerät", "Handy geladen??"
-        )
-        val rightItems = listOf(
-            "Kraftstoff", "Ölstand",
-            "Seeventil", "Beleuchtung",
-            "Signalhorn", "Scheibenwischer"
-        )
-        val extraItems = listOf("Ankerfunktion")
+        // Linke Spalte: CHECKLIST_CREW (Index 0..5)
+        // Mittlere Spalte: CHECKLIST_TECH (Index 6..11)
+        // Rechte Spalte: CHECKLIST_NAV (Index 12..14)
+        val leftItems = CHECKLIST_CREW
+        val rightItems = CHECKLIST_TECH
+        val extraItems = CHECKLIST_NAV
 
         val rowH = 12f
-        val col1X = M; val col2X = M + CW * 0.35f; val col3X = M + CW * 0.65f
+        val col1X = M; val col2X = M + CW * 0.35f; val col3X = M + CW * 0.68f
         val boxS = 7f
 
-        // Draw outer border for checklist area
         val checkH = leftItems.size * rowH + 4f
         c.drawRect(M, y - 2f, M + CW, y + checkH, brd)
-        // Vertical dividers
         c.drawLine(col2X - 6f, y - 2f, col2X - 6f, y + checkH, thinBorderPaint())
         c.drawLine(col3X - 6f, y - 2f, col3X - 6f, y + checkH, thinBorderPaint())
 
+        fun drawBox(x: Float, yTop: Float, checked: Boolean) {
+            c.drawRect(x, yTop, x + boxS, yTop + boxS, chk)
+            if (checked) {
+                // Häkchen als kleines V
+                c.drawLine(x + 1f, yTop + boxS * 0.55f,
+                           x + boxS * 0.4f, yTop + boxS - 1f, chk)
+                c.drawLine(x + boxS * 0.4f, yTop + boxS - 1f,
+                           x + boxS - 0.5f, yTop + 1f, chk)
+            }
+        }
+
         for (i in leftItems.indices) {
             val cy = y + i * rowH
-            // Left column
-            c.drawRect(col1X + 4f, cy + 1f, col1X + 4f + boxS, cy + 1f + boxS, chk)
+            drawBox(col1X + 4f, cy + 1f, d.checklist.getOrNull(i) == true)
             c.drawText(leftItems[i], col1X + 16f, cy + 7.5f, sp)
-            // Middle column
             if (i < rightItems.size) {
-                c.drawRect(col2X, cy + 1f, col2X + boxS, cy + 1f + boxS, chk)
+                drawBox(col2X, cy + 1f, d.checklist.getOrNull(i + 6) == true)
                 c.drawText(rightItems[i], col2X + 12f, cy + 7.5f, sp)
             }
-            // Right column (only first row)
             if (i < extraItems.size) {
-                c.drawRect(col3X, cy + 1f, col3X + boxS, cy + 1f + boxS, chk)
+                drawBox(col3X, cy + 1f, d.checklist.getOrNull(i + 12) == true)
                 c.drawText(extraItems[i], col3X + 12f, cy + 7.5f, sp)
             }
         }
@@ -220,7 +225,7 @@ object LogbookPdfGenerator {
     //  WAYPOINT TABLE  (Törnverlauf)
     // ══════════════════════════════════════════════════
     private fun drawWaypointTable(
-        c: Canvas, startY: Float, log: LogbookEntry, d: Map<String, String>
+        c: Canvas, startY: Float, log: LogbookEntry, d: LogbookDetails
     ): Float {
         var y = startY
         val hp = headerPaint()
@@ -233,8 +238,8 @@ object LogbookPdfGenerator {
         val routeParts = log.routeDesc.split("\u2192", "->", "\u2794", "nach").map { it.trim() }
         val from = routeParts.firstOrNull() ?: "\u2013"
         val to = routeParts.getOrNull(1) ?: "\u2013"
-        val depTime = d["abfahrt"]?.takeLast(5) ?: "\u2013"
-        val arrTime = d["ankunft"]?.takeLast(5) ?: "\u2013"
+        val depTime = d.abfahrt.takeLast(5).ifBlank { "\u2013" }
+        val arrTime = d.ankunft.takeLast(5).ifBlank { "\u2013" }
 
         // Column positions (absolute from M) matching Excel columns B..N
         // B=WP, C=Nr, D=WuK, E=UKW, F=Entf, G=Kurs, H=Boot, I=Wind, J=Strom, K=Geschw, L=Uhrz, M=Fz.Ber, N=Fz.Echt
@@ -363,9 +368,10 @@ object LogbookPdfGenerator {
     // ══════════════════════════════════════════════════
     //  EVENTS / NOTES
     // ══════════════════════════════════════════════════
-    private fun drawEvents(c: Canvas, startY: Float): Float {
+    private fun drawEvents(c: Canvas, startY: Float, d: LogbookDetails): Float {
         var y = startY
         val hp = headerPaint()
+        val vp = valuePaint()
         val brd = borderPaint()
         val tbrd = thinBorderPaint()
 
@@ -374,11 +380,30 @@ object LogbookPdfGenerator {
 
         val boxH = 100f
         c.drawRect(M, y, M + CW, y + boxH, brd)
-        // Ruled lines inside
+
         val lineSpacing = 14f
+        // Bemerkungstext zeilenweise umbrechen
+        val bem = d.bemerkungen.trim()
+        val maxCharsPerLine = ((CW - 10f) / vp.measureText("n")).toInt().coerceAtLeast(20)
+        val lines = mutableListOf<String>()
+        bem.split("\n").forEach { paragraph ->
+            var rest = paragraph
+            while (rest.length > maxCharsPerLine) {
+                val cut = rest.lastIndexOf(' ', maxCharsPerLine).let { if (it <= 0) maxCharsPerLine else it }
+                lines += rest.substring(0, cut).trim()
+                rest = rest.substring(cut).trim()
+            }
+            if (rest.isNotBlank()) lines += rest
+        }
+
         var ly = y + lineSpacing
+        var idx = 0
         while (ly < y + boxH) {
             c.drawLine(M + 2f, ly, M + CW - 2f, ly, tbrd)
+            if (idx < lines.size) {
+                c.drawText(lines[idx], M + 4f, ly - 2f, vp)
+                idx++
+            }
             ly += lineSpacing
         }
 
@@ -435,52 +460,6 @@ object LogbookPdfGenerator {
         // Truncate value to fit cell
         val maxChars = ((w - 8f) / vp.measureText("W")).toInt().coerceAtLeast(1)
         c.drawText(value.take(maxChars), x + 3f, y + 21f, vp)
-    }
-
-    private fun parseLogDetails(details: String): Map<String, String> {
-        if (details.isBlank()) return emptyMap()
-        val map = mutableMapOf<String, String>()
-        val segments = details.split("|")
-        for (seg in segments) {
-            val idx = seg.indexOf(':')
-            if (idx > 0) {
-                val key = seg.substring(0, idx).trim().lowercase()
-                val value = seg.substring(idx + 1).trim()
-                if (value.isNotBlank()) {
-                    when (key) {
-                        "abfahrt" -> map["abfahrt"] = value
-                        "ankunft" -> map["ankunft"] = value
-                        "wt" -> map["wt"] = value
-                        "ukc" -> map["ukc"] = value
-                        "fmw" -> map["fmw"] = value
-                        "wetter" -> map["wetter"] = value
-                        "gezeiten" -> map["gezeiten"] = value
-                        "crew" -> map["crew"] = value
-                    }
-                }
-            }
-        }
-        if (map.isEmpty()) {
-            for (line in details.split("\n", ";")) {
-                val idx = line.indexOf(':')
-                if (idx > 0) {
-                    val key = line.substring(0, idx).trim().lowercase()
-                    val value = line.substring(idx + 1).trim()
-                    if (value.isNotBlank()) when {
-                        key.contains("abfahrt") -> map["abfahrt"] = value
-                        key.contains("ankunft") -> map["ankunft"] = value
-                        key.contains("wt") || key.contains("wassertiefe") -> map["wt"] = value
-                        key.contains("ukc") -> map["ukc"] = value
-                        key.contains("fmw") -> map["fmw"] = value
-                        key.contains("wetter") -> map["wetter"] = value
-                        key.contains("gezeiten") -> map["gezeiten"] = value
-                        key.contains("crew") -> map["crew"] = value
-                    }
-                }
-            }
-        }
-        if (map.isEmpty() && details.isNotBlank()) map["wetter"] = details
-        return map
     }
 
     private fun saveAndNotify(context: Context, doc: PdfDocument, log: LogbookEntry) {
