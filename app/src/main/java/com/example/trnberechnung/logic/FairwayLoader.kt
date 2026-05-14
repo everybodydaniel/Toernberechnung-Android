@@ -144,6 +144,13 @@ object FairwayLoader {
         "production_area"
     )
 
+    // ── Routing-Bounding-Box (Ostfriesisches Wattenmeer) ─────────────────
+    // Buoys/Beacons außerhalb werden nicht zu Pricken-Ketten verarbeitet.
+    private val BBOX_LAT_MIN = 53.3
+    private val BBOX_LAT_MAX = 54.0
+    private val BBOX_LON_MIN = 6.3
+    private val BBOX_LON_MAX = 8.3
+
     /** Parst eine GeoJSON FeatureCollection. Liefert die Anzahl gelesener Features. */
     private fun parseFeatureCollection(json: String): Int {
         val root = JSONObject(json)
@@ -151,6 +158,7 @@ object FairwayLoader {
 
         val features = root.optJSONArray("features") ?: return 0
         var count = 0
+        // ── Pass 1: LineStrings + Polygone (Standard-Features) ──
         for (i in 0 until features.length()) {
             val feat = features.optJSONObject(i) ?: continue
             val geom = feat.optJSONObject("geometry") ?: continue
@@ -162,6 +170,9 @@ object FairwayLoader {
                 "MultiPolygon" -> if (parseMultiPolygonZone(geom, props)) count++
             }
         }
+        // ── Pass 2: laterale Tonnen → Pricken-Ketten ──
+        // Erzeugt zusätzliche Waypoints + Edges aus rot/grün-Paaren.
+        count += buildBuoyChains(features)
         return count
     }
 
@@ -269,31 +280,187 @@ object FairwayLoader {
         return added
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    //  PRICKEN-KETTEN aus lateralen Tonnen
+    // ─────────────────────────────────────────────────────────────────────
     /**
-     * Verknüpft jeden Fahrwasser-Endpunkt mit dem nächsten Basis-Waypoint,
-     * sofern der ≤ ~0,7 sm (≈ 0,012°) entfernt ist. Sonst hängt das
-     * Fahrwasser isoliert im Graphen.
+     * Da OSM im offenen Watt fast keine Fahrwasser als LineStrings hat,
+     * sondern nur einzelne Tonnen/Pricken als Points, rekonstruieren wir
+     * Fahrwasser daraus:
+     *
+     *  1. Jede rote (port) laterale Tonne wird mit der nächsten grünen
+     *     (starboard) Tonne in ≤ ~500 m gepaart → der Mittelpunkt liegt
+     *     in der Fahrrinne.
+     *  2. Diese Mittelpunkte werden zu Waypoints. Jeder bekommt zu seinen
+     *     bis zu K (= 3) nächsten Nachbarn in ≤ ~900 m je eine Kante —
+     *     das ergibt ein zusammenhängendes Pricken-Netz im Watt.
+     *  3. Bbox auf Ostfriesland eingeschränkt, damit Nordfriesland nicht
+     *     mitgeparst wird.
+     *
+     * Heuristik, nicht exakt. Aber sehr viel näher an der Realität als
+     * Hartkodierungen, weil die Tonnen-Positionen ja vermessen sind.
+     */
+    private fun buildBuoyChains(features: org.json.JSONArray): Int {
+        data class Buoy(val lat: Double, val lon: Double, val isRed: Boolean)
+        val buoys = mutableListOf<Buoy>()
+
+        for (i in 0 until features.length()) {
+            val feat = features.optJSONObject(i) ?: continue
+            val props = feat.optJSONObject("properties") ?: continue
+            val type = props.optString("seamark:type")
+            if (type != "buoy_lateral" && type != "beacon_lateral") continue
+
+            val geom = feat.optJSONObject("geometry") ?: continue
+            if (geom.optString("type") != "Point") continue
+            val coords = geom.optJSONArray("coordinates") ?: continue
+            val lon = coords.optDouble(0)
+            val lat = coords.optDouble(1)
+            if (lat !in BBOX_LAT_MIN..BBOX_LAT_MAX) continue
+            if (lon !in BBOX_LON_MIN..BBOX_LON_MAX) continue
+
+            val tag = if (type == "buoy_lateral") "buoy_lateral" else "beacon_lateral"
+            val category = props.optString("seamark:$tag:category")
+            val colour = props.optString("seamark:$tag:colour")
+            val isRed = category == "port" || category == "preferred_channel_port" ||
+                        colour.startsWith("red")
+            val isGreen = category == "starboard" || category == "preferred_channel_starboard" ||
+                          colour.startsWith("green")
+            when {
+                isRed -> buoys += Buoy(lat, lon, isRed = true)
+                isGreen -> buoys += Buoy(lat, lon, isRed = false)
+            }
+        }
+
+        if (buoys.size < 4) {
+            Log.i(TAG, "Buoy chains: only ${buoys.size} lateral buoys in bbox — skipping")
+            return 0
+        }
+
+        val reds = buoys.filter { it.isRed }
+        val greens = buoys.filter { !it.isRed }
+        Log.d(TAG, "Buoy chains: ${reds.size} red + ${greens.size} green in bbox")
+
+        // ── (1) Paarung: jede rote Tonne mit nächster grüner in ≤ 500 m ──
+        // 0.005° ≈ 555 m bei 53,7° N — ausreichend für schmale Pricken-Pfade.
+        val maxPairDistDeg = 0.005
+        val maxPairDistSq = maxPairDistDeg * maxPairDistDeg
+        val usedGreen = BooleanArray(greens.size)
+        data class Midpoint(val lat: Double, val lon: Double)
+        val midpoints = mutableListOf<Midpoint>()
+
+        for (red in reds) {
+            var bestIdx = -1
+            var bestSq = Double.MAX_VALUE
+            for (gi in greens.indices) {
+                if (usedGreen[gi]) continue
+                val g = greens[gi]
+                val dLat = red.lat - g.lat
+                val dLon = red.lon - g.lon
+                val sq = dLat * dLat + dLon * dLon
+                if (sq < bestSq) { bestSq = sq; bestIdx = gi }
+            }
+            if (bestIdx >= 0 && bestSq <= maxPairDistSq) {
+                usedGreen[bestIdx] = true
+                val g = greens[bestIdx]
+                midpoints += Midpoint(
+                    (red.lat + g.lat) / 2.0,
+                    (red.lon + g.lon) / 2.0
+                )
+            }
+        }
+
+        Log.d(TAG, "Buoy chains: ${midpoints.size} pairs → channel midpoints")
+        if (midpoints.size < 2) return 0
+
+        // ── (2) Midpoints als Waypoints hinzufügen ──
+        val mpIds = midpoints.mapIndexed { idx, mp ->
+            val id = "pricken_$idx"
+            // Tiefe als 0,5 m (konservativ — Watt-Pricken markieren oft
+            // <1 m Fahrwasser; ohne echte Tiefenangabe konservativer Default)
+            _extraWaypoints += NauticalRouter.WP(id, mp.lat, mp.lon, 0.5)
+            id
+        }
+
+        // ── (3) Verknüpfung: jeder Midpoint zu seinen K nächsten Nachbarn ──
+        // 0.008° ≈ 890 m. K=3, damit das Netz auch bei Verzweigungen zusammenhängt.
+        val maxLinkDistDeg = 0.008
+        val maxLinkDistSq = maxLinkDistDeg * maxLinkDistDeg
+        val K = 3
+        var edgeCount = 0
+        for (i in midpoints.indices) {
+            val a = midpoints[i]
+            val neighbors = mutableListOf<Pair<Int, Double>>()
+            for (j in midpoints.indices) {
+                if (j == i) continue
+                val b = midpoints[j]
+                val dLat = a.lat - b.lat
+                val dLon = a.lon - b.lon
+                val sq = dLat * dLat + dLon * dLon
+                if (sq <= maxLinkDistSq) neighbors += j to sq
+            }
+            neighbors.sortBy { it.second }
+            for ((j, _) in neighbors.take(K)) {
+                if (i < j) {  // Dedup ungerichtete Kanten
+                    _extraEdges += mpIds[i] to mpIds[j]
+                    edgeCount++
+                }
+            }
+        }
+
+        Log.i(TAG, "Buoy chains: ${midpoints.size} WPs, $edgeCount edges added to graph")
+        // Wir zählen die Pricken-Kette einmal als ein "Feature", damit isLoaded triggert.
+        return if (midpoints.isNotEmpty()) 1 else 0
+    }
+
+    /**
+     * Verknüpft die extra-Waypoints mit dem Basisgraph.
+     *
+     *  • Fahrwasser-LineStrings (id-Prefix `way_*` oder ähnliches): nur erster
+     *    und letzter Punkt jeder Linie an den nächsten Basis-WP innerhalb
+     *    ~0,7 sm anschließen. Das hält das ursprüngliche Linien-Tracing intakt.
+     *  • Pricken-Mittelpunkte (id-Prefix `pricken_`): JEDEN einzeln testen,
+     *    weil die Pricken-Ketten lange Verläufe haben und an mehreren Stellen
+     *    nahe an Häfen vorbeiziehen. So bekommt jeder erreichbare Hafen einen
+     *    Einstieg ins Pricken-Netz.
      */
     private fun connectEndpointsToBaseGraph() {
-        val maxDistDeg = 0.012
+        val maxDistDeg = 0.012  // ~0,7 sm
+        val maxDistSq = maxDistDeg * maxDistDeg
         val baseList = NauticalRouter.baseWaypointsForLoader()
         if (baseList.isEmpty()) return
 
-        val groups = _extraWaypoints.groupBy { it.id.substringBeforeLast('_') }
+        val (pricken, fairwayWps) = _extraWaypoints.partition { it.id.startsWith("pricken_") }
+
+        // Fahrwasser-LineStrings: nur Endpunkte pro Gruppe (Linie)
+        val groups = fairwayWps.groupBy { it.id.substringBeforeLast('_') }
         for ((_, members) in groups) {
             val endpoints = listOfNotNull(members.firstOrNull(), members.lastOrNull()).distinct()
             for (endpoint in endpoints) {
-                val nearest = baseList.minByOrNull { wp ->
-                    val dLat = wp.lat - endpoint.lat
-                    val dLon = wp.lon - endpoint.lon
-                    dLat * dLat + dLon * dLon
-                } ?: continue
-                val dLat = nearest.lat - endpoint.lat
-                val dLon = nearest.lon - endpoint.lon
-                if (dLat * dLat + dLon * dLon <= maxDistDeg * maxDistDeg) {
-                    _extraEdges += endpoint.id to nearest.id
-                }
+                connectIfClose(endpoint, baseList, maxDistSq)
             }
+        }
+
+        // Pricken-Netz: jeder Mittelpunkt einzeln. Bei vielen Pricken (1000+)
+        // ist das O(N×M), aber M (≈100 base WPs) hält's überschaubar.
+        for (wp in pricken) {
+            connectIfClose(wp, baseList, maxDistSq)
+        }
+    }
+
+    private fun connectIfClose(
+        wp: NauticalRouter.WP,
+        baseList: List<NauticalRouter.WP>,
+        maxDistSq: Double
+    ) {
+        val nearest = baseList.minByOrNull { b ->
+            val dLat = b.lat - wp.lat
+            val dLon = b.lon - wp.lon
+            dLat * dLat + dLon * dLon
+        } ?: return
+        val dLat = nearest.lat - wp.lat
+        val dLon = nearest.lon - wp.lon
+        if (dLat * dLat + dLon * dLon <= maxDistSq) {
+            _extraEdges += wp.id to nearest.id
         }
     }
 }
