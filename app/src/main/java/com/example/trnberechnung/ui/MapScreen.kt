@@ -433,25 +433,41 @@ fun MapScreen(
 
                                 sm.addClickListener { symbol ->
                                     if (mapState.isDestroyed) return@addClickListener false
-                                    
-                                    val data = symbol.data?.asString ?: ""
-                                    // Use post to avoid crashing if sm.deleteAll() is triggered 
-                                    // by the state change within the click event loop
+
+                                    // Daten SOFORT auslesen — sobald wir asynchron werden,
+                                    // kann das Symbol durch sm.deleteAll() im LaunchedEffect
+                                    // schon ungültig sein.
+                                    val data = try {
+                                        symbol.data?.asString.orEmpty()
+                                    } catch (_: Exception) { "" }
+
+                                    if (data.isBlank()) return@addClickListener true
+
+                                    // Auf den Main-Looper posten, damit der State-Change nicht
+                                    // mitten im MapLibre-Touch-Dispatch passiert.
                                     mapView.post {
-                                        if (!mapState.isDestroyed) {
+                                        if (mapState.isDestroyed) return@post
+                                        try {
                                             if (data.startsWith("harbor:")) {
                                                 val harborName = data.removePrefix("harbor:")
-                                                harbors.find { it.area == harborName }?.let { onHarborClick(it) }
+                                                harbors.firstOrNull { it.area == harborName }
+                                                    ?.let { onHarborClick(it) }
                                             } else {
-                                                stations.find { it.area == data }?.let { onStationSelected(it) }
+                                                stations.firstOrNull { it.area == data }
+                                                    ?.let { onStationSelected(it) }
                                             }
+                                        } catch (e: Exception) {
+                                            Log.w(TAG, "Harbor/Station click handler failed", e)
                                         }
                                     }
                                     true
                                 }
                                 map.addOnMapClickListener { point ->
-                                    if (!mapState.isDestroyed) {
+                                    if (mapState.isDestroyed) return@addOnMapClickListener false
+                                    try {
                                         onMapClick(point)
+                                    } catch (e: Exception) {
+                                        Log.w(TAG, "Map click handler failed", e)
                                     }
                                     true
                                 }

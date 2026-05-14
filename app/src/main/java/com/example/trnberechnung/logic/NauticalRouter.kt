@@ -68,20 +68,30 @@ object NauticalRouter {
         WP("osterems",        53.670, 7.100, 4.0),
 
         // === BUSETIEF (Norddeich ↔ Norderney) ===
+        // (norderney_s wird im Insel-Anlauf-Block weiter unten definiert)
         WP("norddeich_off",   53.617, 7.162, 3.0),
         WP("busetief_s",      53.635, 7.160, 2.5),
         WP("busetief_mid",    53.652, 7.162, 2.0),
         WP("busetief_n",      53.670, 7.165, 2.0),
-        WP("norderney_s",     53.683, 7.200, 1.5),
 
-        // === WATTFAHRWASSER (Innenkanal, Küste Ost) ===
-        WP("watt_norden",     53.660, 7.250, 0.5),
-        WP("watt_nesskana",   53.670, 7.330, 0.2),
-        WP("watt_dornum",     53.680, 7.400, 0.0),
-        WP("watt_bensersiel", 53.700, 7.520, 0.3),
-        WP("watt_neuharling", 53.720, 7.650, 0.5),
-        WP("watt_harlesiel",  53.730, 7.800, 0.8),
-        WP("watt_wangerooge", 53.740, 7.920, 0.5),
+        // === WATTFAHRWASSER (Innenkanal, zwischen Inseln und Festland) ===
+        // Liegt im Watt SÜDLICH der Inselkette, nicht durch sie hindurch.
+        // Quelle: OpenSeaMap Watt-Pricken 2025.
+        WP("watt_norden",     53.628, 7.250, 0.5),  // Watt südlich Norderney
+        WP("watt_nesskana",   53.638, 7.330, 0.2),  // Nesskanal
+        WP("watt_dornum",     53.648, 7.420, 0.0),  // Dornum-Pricken
+        WP("watt_bensersiel", 53.665, 7.535, 0.3),  // Bensersieler Watt
+        WP("watt_neuharling", 53.680, 7.665, 0.5),  // Neuharlinger Watt
+        WP("watt_harlesiel",  53.700, 7.805, 0.8),  // Harlesieler Watt
+        WP("watt_wangerooge", 53.720, 7.910, 0.5),  // Watt südlich Wangerooge
+
+        // === INSEL-ANLAUF-WPs (zwischen Hafen und Wattfahrwasser) ===
+        // Verhindert direkte Hafen→Watt-Sprünge mit unrealistischer Diagonale.
+        WP("norderney_s",     53.683, 7.200, 1.5),
+        WP("baltrum_s",       53.705, 7.370, 0.8),
+        WP("langeoog_s",      53.715, 7.510, 1.0),
+        WP("spiekeroog_s",    53.745, 7.700, 1.2),
+        WP("wangerooge_s",    53.770, 7.900, 0.8),
 
         // === BORKUM-UMFAHRUNG ===
         WP("borkum_south",    53.550, 6.680, 4.0),
@@ -249,13 +259,24 @@ object NauticalRouter {
         "watt_harlesiel" to "watt_wangerooge",
         "watt_wangerooge" to "jade_entrance",
 
-        // ── Inselhäfen ↔ Wattfahrwasser ──
+        // ── Inselhäfen ↔ Insel-Anlauf ↔ Wattfahrwasser ──
+        // (geht NIE direkt vom Hafen ins Watt — immer über den Insel-Süd-Anlauf,
+        //  damit die Polyline keine Diagonale über die Insel zieht)
         "juist_hbr" to "osterems",
         "norderney_hbr" to "norderney_s",
-        "baltrum_hbr" to "watt_dornum",
-        "langeoog_hbr" to "watt_bensersiel",
-        "spiekeroog_hbr" to "watt_neuharling",
-        "wangerooge_hbr" to "watt_wangerooge",
+        "norderney_s" to "watt_norden",
+        "baltrum_hbr" to "baltrum_s",
+        "baltrum_s" to "watt_nesskana",
+        "baltrum_s" to "watt_dornum",
+        "langeoog_hbr" to "langeoog_s",
+        "langeoog_s" to "watt_dornum",
+        "langeoog_s" to "watt_bensersiel",
+        "spiekeroog_hbr" to "spiekeroog_s",
+        "spiekeroog_s" to "watt_bensersiel",
+        "spiekeroog_s" to "watt_neuharling",
+        "wangerooge_hbr" to "wangerooge_s",
+        "wangerooge_s" to "watt_neuharling",
+        "wangerooge_s" to "watt_harlesiel",
         "wangerooge_hbr" to "jade_wanger",
 
         // ── Festland-Häfen ↔ Wattfahrwasser ──
@@ -433,7 +454,13 @@ object NauticalRouter {
             minDepth = lastDepth
         ))
 
-        return mergeAdjacentSegments(segments)
+        // Chaikin-Smoothing pro Segment (Typ-Grenzen bleiben erhalten).
+        // Reduziert 90°-Knicks zwischen aufeinanderfolgenden Waypoints,
+        // ohne dass die Kurve über das Original-Polyline hinausschießt.
+        return mergeAdjacentSegments(segments).map { seg ->
+            if (seg.points.size >= 3) seg.copy(points = smoothPath(seg.points))
+            else seg
+        }
     }
 
     /**

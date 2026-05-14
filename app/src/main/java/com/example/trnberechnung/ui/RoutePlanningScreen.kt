@@ -219,55 +219,62 @@ fun RoutePlanningScreen(viewModel: TideViewModel, routeViewModel: RoutePlanningV
                     selectedStartHarbor = selectedStartStation,
                     selectedEndHarbor = selectedEndStation,
                     onHarborClick = { harbor ->
-                        if (mapSelectionMode == "start") {
-                            // Gleicher-Hafen-Validierung
-                            if (selectedEndStation?.area == harbor.area) {
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("Start- und Zielhafen dürfen nicht identisch sein!")
+                        // Schutzschicht: Jeder Hafen-Klick wird in try-catch verpackt, damit
+                        // ein Fehler (z.B. async Tide-API-Fehler) die App nicht crasht.
+                        try {
+                            if (mapSelectionMode == "start") {
+                                if (selectedEndStation?.area == harbor.area) {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Start- und Zielhafen dürfen nicht identisch sein!")
+                                    }
+                                } else {
+                                    selectedStartStation = harbor
+                                    startLocation = harbor.gaugeLabel ?: harbor.area
+                                    viewModel.selectStation(harbor)
+                                    mapSelectionMode = "end"
+                                    selectedEndStation?.let { end ->
+                                        val startPt = LatLng(harbor.latitude, harbor.longitude)
+                                        val endPt = LatLng(end.latitude, end.longitude)
+                                        routeViewModel.loadAndCalculate(
+                                            tideEvents = tideEvents,
+                                            departureTime = routeUiState.departureTime,
+                                            customStart = startPt,
+                                            customEnd = endPt
+                                        )
+                                    }
                                 }
                             } else {
-                                selectedStartStation = harbor
-                                startLocation = harbor.gaugeLabel ?: harbor.area
-                                viewModel.selectStation(harbor)
-                                mapSelectionMode = "end" // Auto-Wechsel zu Zielhafen
-                                selectedEndStation?.let { end ->
-                                    val startPt = LatLng(harbor.latitude, harbor.longitude)
-                                    val endPt = LatLng(end.latitude, end.longitude)
-                                    routeViewModel.loadAndCalculate(
-                                        tideEvents = tideEvents,
-                                        departureTime = routeUiState.departureTime,
-                                        customStart = startPt,
-                                        customEnd = endPt
-                                    )
+                                if (selectedStartStation?.area == harbor.area) {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Start- und Zielhafen dürfen nicht identisch sein!")
+                                    }
+                                } else {
+                                    selectedEndStation = harbor
+                                    destinationLocation = harbor.gaugeLabel ?: harbor.area
+                                    mapSelectionMode = "start"
+                                    selectedStartStation?.let { start ->
+                                        val startPt = LatLng(start.latitude, start.longitude)
+                                        val endPt = LatLng(harbor.latitude, harbor.longitude)
+                                        routeViewModel.loadAndCalculate(
+                                            tideEvents = tideEvents,
+                                            departureTime = routeUiState.departureTime,
+                                            customStart = startPt,
+                                            customEnd = endPt
+                                        )
+                                    }
                                 }
                             }
-                        } else {
-                            // Gleicher-Hafen-Validierung
-                            if (selectedStartStation?.area == harbor.area) {
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar("Start- und Zielhafen dürfen nicht identisch sein!")
-                                }
-                            } else {
-                                selectedEndStation = harbor
-                                destinationLocation = harbor.gaugeLabel ?: harbor.area
-                                mapSelectionMode = "start" // Zurücksetzen
-                                selectedStartStation?.let { start ->
-                                    val startPt = LatLng(start.latitude, start.longitude)
-                                    val endPt = LatLng(harbor.latitude, harbor.longitude)
-                                    routeViewModel.loadAndCalculate(
-                                        tideEvents = tideEvents,
-                                        departureTime = routeUiState.departureTime,
-                                        customStart = startPt,
-                                        customEnd = endPt
-                                    )
-                                }
+                        } catch (e: Exception) {
+                            android.util.Log.e("RoutePlanning", "Harbor click failed", e)
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Hafen-Auswahl fehlgeschlagen: ${e.message ?: "unbekannt"}")
                             }
                         }
                     },
                     onMapClick = { /* Deaktiviert – Häfen werden über Marker/Dropdown ausgewählt */ },
                     onStationSelected = { station ->
-                        // Station-Info anzeigen, aber keine Route setzen
-                        viewModel.selectStation(station)
+                        try { viewModel.selectStation(station) }
+                        catch (e: Exception) { android.util.Log.e("RoutePlanning", "selectStation failed", e) }
                     }
                 )
 

@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,7 +29,6 @@ import com.example.trnberechnung.ui.theme.*
 import com.example.trnberechnung.viewmodel.TideViewModel
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,9 +47,36 @@ fun TideGraphScreen(viewModel: TideViewModel) {
         }
     }
 
-    // Events für heute filtern
+    // Heute-Liste (für die HW/NW-Aufstellung unter dem Graph)
     val todayStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
     val todayEvents = tideEvents.filter { it.timestamp.startsWith(todayStr) }
+
+    // 36-Stunden-Fenster für die Tidenkurve: gestern Abend (HW) bis morgen früh (HW).
+    // Damit gibt's links und rechts vom heutigen Tag echte Datenpunkte und keine
+    // konstanten Plateaus mehr.
+    val now = LocalDateTime.now()
+    val windowStart = now.minusHours(18)
+    val windowEnd = now.plusHours(18)
+    val windowEvents = remember(tideEvents, now.hour) {
+        tideEvents.mapNotNull { event ->
+            try {
+                val cleanTs = event.timestamp
+                    .replace("T", " ")
+                    .replace(Regex("Z$"), "")
+                    .replace(Regex("\\+\\d{2}:\\d{2}$"), "")
+                    .replace(Regex("\\+\\d{2}$"), "")
+                    .trim()
+                val dt = try {
+                    LocalDateTime.parse(cleanTs, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                } catch (_: Exception) {
+                    LocalDateTime.parse(cleanTs, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                }
+                event to dt
+            } catch (_: Exception) { null }
+        }.filter { (_, dt) ->
+            !dt.isBefore(windowStart) && !dt.isAfter(windowEnd)
+        }
+    }
 
     // Fallback: wenn keine Station ausgewählt, nimm die erste
     LaunchedEffect(allStations) {
@@ -127,21 +154,20 @@ fun TideGraphScreen(viewModel: TideViewModel) {
             }
         }
 
-        // Tidenkurve Canvas
+        // Tidenkurve Canvas — 36h Window zentriert um JETZT
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .height(240.dp)
                 .padding(bottom = 16.dp)
                 .border(1.dp, NauticalDivider, RoundedCornerShape(16.dp)),
             colors = CardDefaults.cardColors(containerColor = NauticalSurface),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             shape = RoundedCornerShape(16.dp)
         ) {
-            if (todayEvents.isEmpty()) {
-                // Fallback: Sinuskurve wie vorher
+            if (windowEvents.size < 2) {
                 Box(modifier = Modifier.padding(16.dp)) {
-                    TideCurveCanvas(emptyList())
+                    TideCurveCanvas(emptyList(), windowStart, windowEnd, now)
                     Text(
                         if (tideLoading) "Lade Daten..." else "Keine Daten – bitte Station auswählen",
                         color = NauticalTextSecondary,
@@ -150,16 +176,8 @@ fun TideGraphScreen(viewModel: TideViewModel) {
                     )
                 }
             } else {
-                Box(modifier = Modifier.padding(16.dp)) {
-                    TideCurveCanvas(todayEvents)
-                    // JETZT-Label
-                    Text(
-                        "JETZT",
-                        color = NauticalNowLine,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                    )
+                Box(modifier = Modifier.padding(top = 12.dp, bottom = 8.dp, start = 32.dp, end = 12.dp)) {
+                    TideCurveCanvas(windowEvents.map { it.first }, windowStart, windowEnd, now)
                 }
             }
         }
@@ -211,131 +229,184 @@ fun TideGraphScreen(viewModel: TideViewModel) {
 }
 
 @Composable
-private fun TideCurveCanvas(events: List<TideEvent>) {
+private fun TideCurveCanvas(
+    events: List<TideEvent>,
+    windowStart: LocalDateTime,
+    windowEnd: LocalDateTime,
+    now: LocalDateTime
+) {
+    val tickColor = NauticalTextSecondary
+    val tideColor = NauticalTideBlue
+    val gridColor = NauticalGridLine
+    val nowColor = NauticalNowLine
+    val gradientColor = NauticalTideBlue.copy(alpha = 0.18f)
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val labelTextSize = with(density) { 10.sp.toPx() }
+
     Canvas(modifier = Modifier.fillMaxSize()) {
         val width = size.width
         val height = size.height
-        val middleY = height / 2f
+        val plotPaddingTop = 8f
+        val plotPaddingBottom = 24f  // Platz für Stunden-Labels
+        val plotHeight = height - plotPaddingTop - plotPaddingBottom
+        val plotBottomY = height - plotPaddingBottom
 
-        // Zeichne Achsen
-        drawLine(
-            color = NauticalGridLine,
-            start = Offset(0f, middleY),
-            end = Offset(width, middleY),
-            strokeWidth = 2f
-        )
+        // Window in Minuten
+        val windowMinutes = java.time.Duration.between(windowStart, windowEnd).toMinutes().toDouble()
+        if (windowMinutes <= 0) return@Canvas
 
-        // Subtile Hilfslinien
-        drawLine(
-            color = NauticalGridLine.copy(alpha = 0.3f),
-            start = Offset(0f, height * 0.25f),
-            end = Offset(width, height * 0.25f),
-            strokeWidth = 1f
-        )
-        drawLine(
-            color = NauticalGridLine.copy(alpha = 0.3f),
-            start = Offset(0f, height * 0.75f),
-            end = Offset(width, height * 0.75f),
-            strokeWidth = 1f
-        )
-
-        if (events.size >= 2) {
-            // Echte Tidenkurve basierend auf HW/NW-Werten
-            val values = events.mapNotNull { it.value }
-            val maxVal = values.maxOrNull() ?: 4.0
-            val minVal = values.minOrNull() ?: 0.0
-            val range = (maxVal - minVal).coerceAtLeast(0.5)
-
-            // Parse timestamps zu Minuten seit Mitternacht
-            val eventsWithMinutes = events.mapNotNull { event ->
-                try {
-                    val cleanTs = event.timestamp
-                        .replace(Regex("\\+\\d{2}:\\d{2}$"), "")
-                        .replace(Regex("\\+\\d{2}$"), "")
-                        .trim()
-                    val dt = java.time.LocalDateTime.parse(
-                        cleanTs,
-                        java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                    )
-                    val minutesSinceMidnight = dt.hour * 60 + dt.minute
-                    Triple(minutesSinceMidnight, event.value ?: 0.0, event.type)
-                } catch (_: Exception) { null }
-            }.sortedBy { it.first }
-
-            if (eventsWithMinutes.isNotEmpty()) {
-                val totalMinutes = 24 * 60
-                val path = Path()
-                var started = false
-
-                // Interpoliere Sinuskurve zwischen den bekannten Punkten
-                for (x in 0..width.toInt()) {
-                    val minute = (x.toFloat() / width * totalMinutes).toInt()
-                    
-                    // Finde umgebende Events
-                    val before = eventsWithMinutes.lastOrNull { it.first <= minute }
-                    val after = eventsWithMinutes.firstOrNull { it.first > minute }
-
-                    val waterLevel = when {
-                        before == null && after != null -> after.second
-                        after == null && before != null -> before.second
-                        before != null && after != null -> {
-                            val progress = (minute - before.first).toFloat() / 
-                                          (after.first - before.first).toFloat()
-                            // Sinusförmige Interpolation (wie Gezeiten natürlicherweise verlaufen)
-                            val cosInterp = (1 - kotlin.math.cos(progress * Math.PI)) / 2.0
-                            before.second + (after.second - before.second) * cosInterp
-                        }
-                        else -> (maxVal + minVal) / 2.0
-                    }
-
-                    val normalizedY = ((waterLevel - minVal) / range).toFloat().coerceIn(0f, 1f)
-                    val yPos = height - (normalizedY * height * 0.8f + height * 0.1f)
-
-                    if (!started) {
-                        path.moveTo(x.toFloat(), yPos)
-                        started = true
-                    } else {
-                        path.lineTo(x.toFloat(), yPos)
-                    }
+        // ── Parse events relativ zum Window-Start ──
+        val pts = events.mapNotNull { ev ->
+            try {
+                val cleanTs = ev.timestamp
+                    .replace("T", " ")
+                    .replace(Regex("Z$"), "")
+                    .replace(Regex("\\+\\d{2}:\\d{2}$"), "")
+                    .replace(Regex("\\+\\d{2}$"), "")
+                    .trim()
+                val dt = try {
+                    LocalDateTime.parse(cleanTs, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                } catch (_: Exception) {
+                    LocalDateTime.parse(cleanTs, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
                 }
+                val minutesFromStart = java.time.Duration.between(windowStart, dt).toMinutes().toDouble()
+                Triple(minutesFromStart, ev.value ?: 0.0, ev.type)
+            } catch (_: Exception) { null }
+        }.sortedBy { it.first }
 
-                drawPath(
-                    path = path,
-                    color = NauticalTideBlue,
-                    style = Stroke(width = 4f, cap = StrokeCap.Round)
-                )
-            }
-        } else {
-            // Fallback: generische Sinuskurve
-            val path = Path()
-            val waveLength = width / 2f
-            val amplitude = height / 3f
+        // Y-Bereich aus Events
+        val values = pts.map { it.second }
+        val maxVal = (values.maxOrNull() ?: 4.0)
+        val minVal = (values.minOrNull() ?: 0.0)
+        val pad = ((maxVal - minVal) * 0.15).coerceAtLeast(0.3)
+        val yMax = maxVal + pad
+        val yMin = minVal - pad
+        val yRange = (yMax - yMin).coerceAtLeast(0.5)
 
-            for (x in 0..width.toInt()) {
-                val xFloat = x.toFloat()
-                val yFloat = middleY - (sin((xFloat / waveLength) * 2 * Math.PI) * amplitude).toFloat()
+        fun yForLevel(level: Double): Float =
+            plotBottomY - ((level - yMin) / yRange * plotHeight).toFloat()
 
-                if (x == 0) path.moveTo(xFloat, yFloat)
-                else path.lineTo(xFloat, yFloat)
-            }
+        fun xForMinute(min: Double): Float =
+            (min / windowMinutes * width).toFloat()
 
-            drawPath(
-                path = path,
-                color = NauticalTideBlue,
-                style = Stroke(width = 6f, cap = StrokeCap.Round)
+        // ── Hilfslinien horizontal ──
+        for (frac in listOf(0.25f, 0.5f, 0.75f)) {
+            val y = plotPaddingTop + plotHeight * frac
+            drawLine(
+                color = gridColor.copy(alpha = 0.25f),
+                start = Offset(0f, y),
+                end = Offset(width, y),
+                strokeWidth = 1f
             )
         }
 
-        // JETZT-Linie (dynamisch positioniert)
-        val now = java.time.LocalDateTime.now()
-        val minutesSinceMidnight = now.hour * 60 + now.minute
-        val nowX = (minutesSinceMidnight.toFloat() / (24 * 60)) * width
-        drawLine(
-            color = NauticalNowLine,
-            start = Offset(nowX, 0f),
-            end = Offset(nowX, height),
-            strokeWidth = 3f
-        )
+        // ── Stunden-Markierungen alle 6h ──
+        val hourPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.argb(255, 122, 138, 158)  // NauticalTextSecondary
+            textSize = labelTextSize
+            textAlign = android.graphics.Paint.Align.CENTER
+            isAntiAlias = true
+        }
+        var hourTick = windowStart.withMinute(0).withSecond(0).withNano(0)
+        // auf nächste durch 6 teilbare Stunde
+        hourTick = hourTick.plusHours(((6 - hourTick.hour % 6) % 6).toLong())
+        while (!hourTick.isAfter(windowEnd)) {
+            val minutes = java.time.Duration.between(windowStart, hourTick).toMinutes().toDouble()
+            val x = xForMinute(minutes)
+            drawLine(
+                color = gridColor.copy(alpha = 0.2f),
+                start = Offset(x, plotPaddingTop),
+                end = Offset(x, plotBottomY),
+                strokeWidth = 1f
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                "%02d:00".format(hourTick.hour),
+                x,
+                height - 6f,
+                hourPaint
+            )
+            hourTick = hourTick.plusHours(6)
+        }
+
+        // ── Tidenkurve mit Cosinus-Interpolation ──
+        if (pts.size >= 2) {
+            val path = Path()
+            val fillPath = Path()
+            var started = false
+            val step = 2  // Pixel-Auflösung
+            for (xPx in 0..width.toInt() step step) {
+                val minute = xPx.toDouble() / width * windowMinutes
+                val before = pts.lastOrNull { it.first <= minute }
+                val after = pts.firstOrNull { it.first > minute }
+                val level: Double = when {
+                    before != null && after != null -> {
+                        val span = after.first - before.first
+                        val progress = if (span > 0.0) ((minute - before.first) / span) else 0.0
+                        val cosInterp = (1 - kotlin.math.cos(progress * Math.PI)) / 2.0
+                        before.second + (after.second - before.second) * cosInterp
+                    }
+                    before != null -> before.second
+                    after != null -> after.second
+                    else -> (yMax + yMin) / 2.0
+                }
+                val yPos = yForLevel(level)
+                if (!started) {
+                    path.moveTo(xPx.toFloat(), yPos)
+                    fillPath.moveTo(xPx.toFloat(), plotBottomY)
+                    fillPath.lineTo(xPx.toFloat(), yPos)
+                    started = true
+                } else {
+                    path.lineTo(xPx.toFloat(), yPos)
+                    fillPath.lineTo(xPx.toFloat(), yPos)
+                }
+            }
+            fillPath.lineTo(width, plotBottomY)
+            fillPath.close()
+
+            drawPath(fillPath, color = gradientColor)
+            drawPath(
+                path = path,
+                color = tideColor,
+                style = Stroke(width = 4f, cap = StrokeCap.Round)
+            )
+
+            // HW/NW-Marker-Punkte
+            for ((minutes, level, type) in pts) {
+                if (minutes < 0 || minutes > windowMinutes) continue
+                val cx = xForMinute(minutes)
+                val cy = yForLevel(level)
+                drawCircle(
+                    color = if (type == "HW") NauticalPrimary else NauticalSecondary,
+                    radius = 5f,
+                    center = Offset(cx, cy)
+                )
+                drawCircle(
+                    color = androidx.compose.ui.graphics.Color.White,
+                    radius = 2f,
+                    center = Offset(cx, cy)
+                )
+            }
+        }
+
+        // ── JETZT-Linie ──
+        val nowMinutes = java.time.Duration.between(windowStart, now).toMinutes().toDouble()
+        if (nowMinutes in 0.0..windowMinutes) {
+            val nowX = xForMinute(nowMinutes)
+            drawLine(
+                color = nowColor,
+                start = Offset(nowX, plotPaddingTop),
+                end = Offset(nowX, plotBottomY),
+                strokeWidth = 2f
+            )
+            val nowPaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.argb(255, 255, 82, 82)
+                textSize = labelTextSize
+                textAlign = android.graphics.Paint.Align.CENTER
+                isAntiAlias = true
+                isFakeBoldText = true
+            }
+            drawContext.canvas.nativeCanvas.drawText("JETZT", nowX, plotPaddingTop - 1f, nowPaint)
+        }
     }
 }
 
