@@ -49,7 +49,8 @@ Dieses Projekt nutzt GitHub Actions für kontinuierliche Integration und automat
 - **Style Check (`style-check.yml`):** Führt `ktlint` aus, um die Konsistenz des Code-Stils sicherzustellen.
 - **Dokka Pages (`dokka_pages.yml`):** Generiert automatisch eine HTML-Dokumentation mit Dokka und stellt sie auf GitHub Pages bereit.
 
-
+Coverage:
+https://everybodydaniel.github.io/Toernberechnung-Android/coverage/
 ## Lizenz
 
 Dieses Projekt ist unter der **MIT-Lizenz** lizenziert.
