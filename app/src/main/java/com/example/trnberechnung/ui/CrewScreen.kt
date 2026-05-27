@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -37,14 +38,14 @@ import com.example.trnberechnung.ui.theme.*
 import com.example.trnberechnung.viewmodel.TideViewModel
 
 private val rankColors = mapOf(
-    "Skipper" to Color(0xFFFFD700),        
-    "Navigator" to Color(0xFF00BFA6),      
-    "Steuermann" to Color(0xFF4FC3F7),     
-    "Matrose" to Color(0xFF81C784),         
-    "Koch" to Color(0xFFFFB74D),           
-    "Funker" to Color(0xFFBA68C8),         
-    "Bootsmann" to Color(0xFF4DD0E1),      
-    "Sonstiges" to Color(0xFF90A4AE)       
+    "Skipper" to Color(0xFFFFD700),
+    "Navigator" to Color(0xFF00BFA6),
+    "Steuermann" to Color(0xFF4FC3F7),
+    "Matrose" to Color(0xFF81C784),
+    "Koch" to Color(0xFFFFB74D),
+    "Funker" to Color(0xFFBA68C8),
+    "Bootsmann" to Color(0xFF4DD0E1),
+    "Sonstiges" to Color(0xFF90A4AE)
 )
 
 private val availableRanks = listOf(
@@ -131,6 +132,7 @@ fun CrewScreen(viewModel: TideViewModel) {
                         Column {
                             Text(
                                 "CREW",
+                                modifier = Modifier.testTag("screen_header_crew"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = NauticalTextPrimary,

@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -61,7 +62,7 @@ internal val CHECKLIST_NAV = listOf(
     "Seekarten aktuell",
     "Wegepunkte gesetzt"
 )
-internal const val CHECKLIST_SIZE = 15  
+internal const val CHECKLIST_SIZE = 15
 
 @Composable
 fun LogbookScreen(viewModel: TideViewModel) {
@@ -102,7 +103,9 @@ fun LogbookScreen(viewModel: TideViewModel) {
     ) {
         Text(
             "LOGBUCH",
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
+            modifier = Modifier
+                .padding(start = 16.dp, top = 8.dp, bottom = 4.dp)
+                .testTag("screen_header_logbook"),
             style = MaterialTheme.typography.labelMedium,
             color = NauticalTextSecondary,
             letterSpacing = 1.sp

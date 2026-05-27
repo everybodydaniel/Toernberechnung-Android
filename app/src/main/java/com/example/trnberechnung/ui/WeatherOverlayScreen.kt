@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -73,10 +74,11 @@ fun WeatherOverlayScreen(viewModel: TideViewModel) {
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
             Text(
                 "WETTER",
+                modifier = Modifier.testTag("screen_header_weather"),
                 style = MaterialTheme.typography.labelSmall,
                 color = NauticalTextSecondary,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp
+                letterSpacing = 1.sp
             )
             Text(
                 "DWD-WETTER NORDSEE",
@@ -208,7 +210,7 @@ fun WeatherOverlayScreen(viewModel: TideViewModel) {
                     subValue = cloudCoverText(w.cloudCover)
                 )
             }
-        }   
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -237,8 +239,8 @@ fun WeatherOverlayScreen(viewModel: TideViewModel) {
                 }
             }
         }
-    }   
-}       
+    }
+}
 
 @Composable
 private fun LocationChip(name: String, isSelected: Boolean, weather: WeatherDto?, onClick: () -> Unit) {
@@ -435,7 +437,7 @@ private fun iconToEmoji(iconOrCondition: String?): String = when (iconOrConditio
 @Composable
 private fun AssessmentChip(label: String, isOk: Boolean, isWarning: Boolean) {
     val bg = when {
-        !isOk && !isWarning -> NauticalNoGoBg   
+        !isOk && !isWarning -> NauticalNoGoBg
         !isOk -> NauticalNoGoBg
         isWarning -> Color(0xFF2E2A0A)
         else -> NauticalGoBg
@@ -506,7 +508,7 @@ private fun aggregateToDays(hourlyData: List<WeatherDto>): List<DailyForecast> {
 
         val iconCounts = icons.groupBy { it }.mapValues { it.value.size }
         val dominantIcon = iconCounts.entries
-            .filter { it.value >= 2 } 
+            .filter { it.value >= 2 }
             .maxByOrNull { (iconPriority[it.key] ?: 0) * 100 + it.value }
             ?.key
             ?: iconCounts.maxByOrNull { it.value }?.key

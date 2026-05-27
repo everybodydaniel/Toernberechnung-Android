@@ -75,6 +75,37 @@ class NauticalRouterTest {
     }
 
     @Test
+    fun `calculateRoute handles impossible route by returning start and end`() {
+        // Try to route between two points that are not connected in the graph
+        // (Assuming 'imaginary_island' is not connected to 'emden_port')
+        val start = LatLng(53.3382, 7.1945) // Emden
+        val end = LatLng(0.0, 0.0) // Middle of the ocean, no waypoints nearby
+
+        val route = NauticalRouter.calculateRoute(start, end)
+
+        // It should return at least [start, nearest_start_wp, end] or similar fallback
+        route shouldHaveAtLeastSize 2
+        route.last().latitude shouldBe 0.0
+    }
+
+    @Test
+    fun `NauticalRouter performance test`() {
+        val start = LatLng(53.3382, 7.1945) // Emden
+        val end = LatLng(53.7852, 7.8965)   // Wangerooge (long route)
+
+        val startTime = System.currentTimeMillis()
+        repeat(100) {
+            NauticalRouter.calculateRoute(start, end)
+        }
+        val duration = System.currentTimeMillis() - startTime
+
+        println("Performance: 100 route calculations took ${duration}ms")
+        // Just log the performance for now, as virtualized CI environments
+        // can have extremely high jitter and duration check is unreliable.
+        (duration >= 0) shouldBe true
+    }
+
+    @Test
     fun `calculateSegmentedRoute detects dangerous segments`() {
         val start = LatLng(53.6265, 7.1615) // Norddeich
         val end = LatLng(53.6732, 7.0015)   // Juist

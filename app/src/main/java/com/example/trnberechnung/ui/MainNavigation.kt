@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,7 +40,7 @@ import com.example.trnberechnung.viewmodel.TideViewModel
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector?) {
     object MapRoute : Screen("map_route", "Karte", Icons.Default.LocationOn)
-    object Weather : Screen("weather", "Wetter", null) 
+    object Weather : Screen("weather", "Wetter", null)
     object Tide : Screen("tides", "Gezeiten", Icons.Default.DateRange)
     object Crew : Screen("crew", "Crew", Icons.Default.Person)
     object Logbook : Screen("logbook", "Logbuch", Icons.Default.List)
@@ -158,7 +159,7 @@ fun MainAppScreen(viewModel: TideViewModel) {
             }
             composable(Screen.Settings.route) {
 
-                DashboardScreen { 
+                DashboardScreen {
                     navController.navigate(Screen.MapRoute.route)
                 }
             }
@@ -179,10 +180,11 @@ fun BottomNavigationBar(navController: NavHostController) {
         bottomNavItems.forEach { screen ->
             val isSelected = currentRoute == screen.route
             NavigationBarItem(
-                icon = { 
+                modifier = Modifier.testTag("nav_${screen.route}"),
+                icon = {
                     if (screen.icon != null) {
                         Icon(
-                            screen.icon, 
+                            screen.icon,
                             contentDescription = screen.title,
                             modifier = Modifier.size(24.dp)
                         )
@@ -194,12 +196,12 @@ fun BottomNavigationBar(navController: NavHostController) {
                         )
                     }
                 },
-                label = { 
+                label = {
                     Text(
-                        screen.title, 
+                        screen.title,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         fontSize = 11.sp
-                    ) 
+                    )
                 },
                 selected = isSelected,
                 onClick = {

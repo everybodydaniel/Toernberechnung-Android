@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -88,10 +89,12 @@ fun TideGraphScreen(viewModel: TideViewModel) {
 
         Text(
             "TIDENKURVE",
+            modifier = Modifier
+                .padding(bottom = 8.dp)
+                .testTag("screen_header_tides"),
             style = MaterialTheme.typography.labelMedium,
             color = NauticalTextSecondary,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
+            fontWeight = FontWeight.Bold
         )
 
         ExposedDropdownMenuBox(
@@ -238,7 +241,7 @@ private fun TideCurveCanvas(
         val width = size.width
         val height = size.height
         val plotPaddingTop = 8f
-        val plotPaddingBottom = 24f  
+        val plotPaddingBottom = 24f
         val plotHeight = height - plotPaddingTop - plotPaddingBottom
         val plotBottomY = height - plotPaddingBottom
 
@@ -288,7 +291,7 @@ private fun TideCurveCanvas(
         }
 
         val hourPaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.argb(255, 122, 138, 158)  
+            color = android.graphics.Color.argb(255, 122, 138, 158)
             textSize = labelTextSize
             textAlign = android.graphics.Paint.Align.CENTER
             isAntiAlias = true
@@ -318,7 +321,7 @@ private fun TideCurveCanvas(
             val path = Path()
             val fillPath = Path()
             var started = false
-            val step = 2  
+            val step = 2
             for (xPx in 0..width.toInt() step step) {
                 val minute = xPx.toDouble() / width * windowMinutes
                 val before = pts.lastOrNull { it.first <= minute }

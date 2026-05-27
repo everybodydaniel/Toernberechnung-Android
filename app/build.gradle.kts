@@ -50,6 +50,16 @@ android {
             isReturnDefaultValues = true
         }
     }
+
+    packaging {
+        resources {
+            excludes.add("/META-INF/{AL2.0,LGPL2.1,LICENSE.md,LICENSE-notice.md}")
+            excludes.add("META-INF/LICENSE.md")
+            excludes.add("META-INF/LICENSE-notice.md")
+            pickFirsts.add("META-INF/LICENSE.md")
+            pickFirsts.add("META-INF/LICENSE-notice.md")
+        }
+    }
 }
 
 dependencies {
@@ -111,7 +121,6 @@ tasks.withType<org.jetbrains.dokka.gradle.DokkaTaskPartial>().configureEach {
     }
 }
 
-
 tasks.register<JacocoReport>("jacocoTestReport") {
     dependsOn("testDebugUnitTest")
 
@@ -121,34 +130,47 @@ tasks.register<JacocoReport>("jacocoTestReport") {
         csv.required.set(false)
     }
 
-    val fileFilter = listOf(
-        "**/R.class", "**/R$*.class", "**/BuildConfig.*",
-        "**/Manifest*.*", "**/*Test*.*",
-        "android/**/*.*",
-        "**/databinding/**", "**/android/databinding/**",
-        "**/BR.class", "**/*_MembersInjector.class",
-        "**/*_Factory.class", "**/*Component*.*",
-        "**/*Module*.*",
-        "**/composable/**", // Optional: Compose Previews ausschließen
-        "**/*$*"            // Hilfsklassen ausschließen
-    )
+    val fileFilter =
+        listOf(
+            "**/R.class",
+            "**/R$*.class",
+            "**/BuildConfig.*",
+            "**/Manifest*.*",
+            "**/*Test*.*",
+            "android/**/*.*",
+            "**/databinding/**",
+            "**/android/databinding/**",
+            "**/BR.class",
+            "**/*_MembersInjector.class",
+            "**/*_Factory.class",
+            "**/*Component*.*",
+            "**/*Module*.*",
+            "**/composable/**", // Optional: Compose Previews ausschließen
+            "**/*$*", // Hilfsklassen ausschließen
+        )
 
     // Pfade für Kotlin & Java Klassen (angepasst an moderne AGP Versionen)
-    val kotlinTree = fileTree("${layout.buildDirectory.get().asFile}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes") {
-        exclude(fileFilter)
-    }
-    val javaTree = fileTree("${layout.buildDirectory.get().asFile}/intermediates/javac/debug/classes") {
-        exclude(fileFilter)
-    }
+    val kotlinClassesDir =
+        "${layout.buildDirectory.get().asFile}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"
+    val kotlinTree =
+        fileTree(kotlinClassesDir) {
+            exclude(fileFilter)
+        }
+    val javaTree =
+        fileTree("${layout.buildDirectory.get().asFile}/intermediates/javac/debug/classes") {
+            exclude(fileFilter)
+        }
 
     val mainSrc = "${project.projectDir}/src/main/java"
 
     sourceDirectories.setFrom(files(mainSrc))
     classDirectories.setFrom(files(kotlinTree, javaTree))
-    executionData.setFrom(fileTree(layout.buildDirectory) {
-        include(
-            "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec",
-            "jacoco/testDebugUnitTest.exec"
-        )
-    })
+    executionData.setFrom(
+        fileTree(layout.buildDirectory) {
+            include(
+                "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec",
+                "jacoco/testDebugUnitTest.exec",
+            )
+        },
+    )
 }

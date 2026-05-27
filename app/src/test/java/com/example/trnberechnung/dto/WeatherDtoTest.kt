@@ -94,4 +94,10 @@ class WeatherDtoTest {
         dto.weather.size shouldBe 2
         dto.weather[1].temperature shouldBe 11.0
     }
+
+    @Test(expected = Exception::class)
+    fun `Deserialize invalid JSON should throw exception`() {
+        val malformedJson = "{ 'timestamp': 'invalid' " // Missing closing brace
+        gson.fromJson(malformedJson, WeatherDto::class.java)
+    }
 }

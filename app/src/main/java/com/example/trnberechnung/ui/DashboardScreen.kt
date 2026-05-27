@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -69,7 +70,7 @@ fun DashboardScreen(
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.ExtraBold,
             color = NauticalTextPrimary,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier.padding(bottom = 16.dp).testTag("boat_name_headline")
         )
 
         if (showSavedBanner) {
@@ -111,7 +112,8 @@ fun DashboardScreen(
                     value = boatName,
                     onValueChange = { boatName = it; repo.boatName = it },
                     label = "Bootsname",
-                    placeholder = "z.B. Freya"
+                    placeholder = "z.B. Freya",
+                    modifier = Modifier.testTag("boat_name_input")
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 NauticalTextField(
@@ -267,7 +269,8 @@ fun DashboardScreen(
             onClick = onStartNavigation,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(56.dp)
+                .testTag("navigation_button"),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = NauticalPrimary)
         ) {
