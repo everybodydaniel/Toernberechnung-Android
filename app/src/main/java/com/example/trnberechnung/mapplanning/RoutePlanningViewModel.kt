@@ -235,29 +235,6 @@ class RoutePlanningViewModel(
             }
     }
 
-    fun optimizeTörn() {
-        val windows = _uiState.value.passageWindows
-        if (windows.isEmpty()) {
-            // Wenn kein Fenster da ist, versuchen wir zumindest die Abfahrt auf HW der Engstelle zu legen
-            _uiState.value.routeMetrics?.worstHighWater?.let { hw ->
-                // Wir ziehen die halbe Reisezeit ab, um etwa bei HW an der Engstelle zu sein
-                val travelTime = _uiState.value.routeMetrics?.travelTime ?: java.time.Duration.ZERO
-                updateDeparture(hw.minus(travelTime.dividedBy(2)))
-            }
-            return
-        }
-
-        // Finde das nächste Fenster ab jetzt oder ab gewählter Zeit
-        val now = _uiState.value.departure
-        val bestWindow = windows.find { it.contains(now) }
-            ?: windows.filter { it.start.isAfter(now) }.minByOrNull { it.start }
-            ?: windows.firstOrNull()
-
-        bestWindow?.let {
-            updateDeparture(it.start.plusMinutes(5)) // Kleiner Puffer zum Fensterstart
-        }
-    }
-
     private suspend fun assessWithWindow(
         request: RoutePlanningRequest,
         geometry: List<GeoPoint>,

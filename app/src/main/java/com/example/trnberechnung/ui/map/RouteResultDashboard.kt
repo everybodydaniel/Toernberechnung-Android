@@ -96,7 +96,6 @@ enum class RouteDashboardMode {
 fun RouteResultDashboard(
     state: RoutePlanningUiState,
     onOpenNauti: () -> Unit,
-    onOptimize: () -> Unit,
     onRefreshPassageWindow: () -> Unit,
     onStartNavigation: () -> Unit,
     onSave: () -> Unit,
@@ -113,7 +112,6 @@ fun RouteResultDashboard(
         mode = mode,
         onModeChange = { mode = it },
         onOpenNauti = onOpenNauti,
-        onOptimize = onOptimize,
         onRefreshPassageWindow = onRefreshPassageWindow,
         onNavigate = onStartNavigation,
         onSave = onSave,
@@ -137,7 +135,6 @@ fun RouteResultDashboard(
         mode = mode,
         onModeChange = onModeChange,
         onOpenNauti = onOpenNauti,
-        onOptimize = viewModel::optimizeTörn,
         onRefreshPassageWindow = viewModel::refreshPassageWindow,
         onNavigate = onNavigate,
         onSave = onSave,
@@ -146,12 +143,11 @@ fun RouteResultDashboard(
 }
 
 @Composable
-fun RouteResultDashboardContent(
+private fun RouteResultDashboardContent(
     uiState: RoutePlanningUiState,
     mode: RouteDashboardMode,
     onModeChange: (RouteDashboardMode) -> Unit,
     onOpenNauti: () -> Unit,
-    onOptimize: () -> Unit,
     onRefreshPassageWindow: () -> Unit,
     onNavigate: () -> Unit,
     onSave: () -> Unit,
@@ -196,8 +192,7 @@ fun RouteResultDashboardContent(
                 RouteStatusHeader(uiState)
                 if (uiState.routeStatus == RouteStatus.NICHT_BEFAHRBAR || uiState.routeStatus == RouteStatus.EINGESCHRAENKT) {
                     SafetyFailureSection(
-                        uiState = uiState,
-                        onOptimize = onOptimize
+                        uiState = uiState
                     )
                 }
             }
@@ -283,7 +278,6 @@ private fun DashboardDragHandle(
 @Composable
 private fun SafetyFailureSection(
     uiState: RoutePlanningUiState,
-    onOptimize: () -> Unit,
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val bgColor = if (isDark) Color(0xFF451A1A).copy(alpha = 0.4f) else Color(0xFFFFEBEE).copy(alpha = 0.6f)
@@ -306,21 +300,6 @@ private fun SafetyFailureSection(
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
-        }
-
-        Button(
-            onClick = onOptimize,
-            modifier = Modifier.fillMaxWidth().height(36.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = textColor.copy(alpha = 0.8f),
-                contentColor = Color.White
-            ),
-            shape = RoundedCornerShape(18.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-        ) {
-            Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Törn automatisch optimieren", fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -582,17 +561,7 @@ private fun DashboardMetrics(uiState: RoutePlanningUiState) {
             isLoading = isLoading,
             modifier = Modifier.weight(1f),
         )
-        DashboardMetric(
-            label = "STRÖMUNG",
-            value = metrics?.let { m ->
-                if (m.averageCurrentSetDegrees != null && m.averageCurrentDriftKnots != null) {
-                    String.format(Locale.GERMANY, "%03d° / %.1f kn", m.averageCurrentSetDegrees.roundToInt(), m.averageCurrentDriftKnots)
-                } else "–"
-            } ?: "–",
-            icon = Icons.Default.Water, // Use Water icon instead of Air
-            isLoading = isLoading,
-            modifier = Modifier.weight(1f),
-        )
+        Spacer(Modifier.weight(1f))
     }
 }
 

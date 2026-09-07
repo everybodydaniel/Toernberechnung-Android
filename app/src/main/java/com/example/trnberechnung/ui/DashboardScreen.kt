@@ -325,7 +325,7 @@ fun DashboardScreen(
                         it.replace(',', '.').toFloatOrNull()?.let { v -> repo.draft = v }
                     },
                     icon = Icons.Default.ArrowDownward,
-                    label = "Tiefgang",
+                    label = "Tiefgang (m)",
                     modifier = Modifier.weight(1f),
                 )
                 SettingsNumberBox(
@@ -335,7 +335,7 @@ fun DashboardScreen(
                         it.replace(',', '.').toFloatOrNull()?.let { v -> repo.length = v }
                     },
                     icon = Icons.Default.Straighten,
-                    label = "Länge",
+                    label = "Länge (m)",
                     modifier = Modifier.weight(1f),
                 )
             }
