@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CellTower
@@ -33,7 +34,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.DirectionsBoat
-import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Palette
@@ -71,7 +71,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -82,8 +81,6 @@ import androidx.compose.ui.unit.sp
 import com.example.trnberechnung.R
 import com.example.trnberechnung.model.AppPreferences
 import com.example.trnberechnung.model.BoatProfileRepository
-import com.example.trnberechnung.ui.components.TideNodeBlue
-import com.example.trnberechnung.ui.components.tideNodeGlass
 
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -228,7 +225,7 @@ fun DashboardScreen(
         },
         label = "Bootsname",
         placeholder = "z.B. Morning Star",
-        leadingIcon = Icons.Default.Label,
+        leadingIcon = Icons.AutoMirrored.Filled.Label,
         modifier = Modifier.testTag("boat_name_input"),
     )
 
@@ -353,7 +350,7 @@ fun DashboardScreen(
                         it.replace(',', '.').toFloatOrNull()?.let { v -> repo.safetyMargin = v }
                     },
                     icon = Icons.Default.Shield,
-                    label = "UKC-M",
+                    label = "UKC (m)",
                     modifier = Modifier.weight(1f),
                 )
                 SettingsNumberBox(
@@ -736,9 +733,9 @@ private fun SettingsNumberBox(
     onValueChange: (String) -> Unit,
     icon: ImageVector,
     label: String,
+    modifier: Modifier = Modifier,
     compactLabel: String? = null,
     accessibilityLabel: String = label,
-    modifier: Modifier = Modifier,
 ) {
     val adaptiveLayout = currentAdaptiveLayout()
     val density = LocalDensity.current
@@ -794,16 +791,17 @@ private fun SettingsNumberBox(
             cursorBrush = SolidColor(SettingsPrimaryBlue),
             decorationBox = { innerTextField ->
                 BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val useCompactLabel =
-                        compactLabel != null &&
-                            !adaptiveLayout.isTablet &&
-                            maxWidth < 120.dp * LocalDensity.current.fontScale
+                    val boxScope = this
                     Column(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.Center,
                     ) {
+                        val useCompactLabel =
+                            compactLabel != null &&
+                                !adaptiveLayout.isTablet &&
+                                boxScope.maxWidth < 120.dp * LocalDensity.current.fontScale
                         Text(
-                            text = if (useCompactLabel) compactLabel.orEmpty() else label,
+                            text = if (useCompactLabel) compactLabel else label,
                             color = SettingsSubtitle,
                             fontSize = if (adaptiveLayout.isTablet) 15.sp else 11.sp,
                             lineHeight = if (adaptiveLayout.isTablet) 18.sp else 14.sp,
