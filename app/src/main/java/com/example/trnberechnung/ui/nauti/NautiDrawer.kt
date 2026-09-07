@@ -77,6 +77,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -90,6 +91,7 @@ import com.example.trnberechnung.ui.components.TideNodeBlue
 import com.example.trnberechnung.ui.components.TideNodeCyan
 import com.example.trnberechnung.ui.components.TideNodeInk
 import com.example.trnberechnung.ui.components.tideNodeGlass
+import com.example.trnberechnung.ui.currentAdaptiveLayout
 import com.example.trnberechnung.viewmodel.NautiPanelMode
 import com.example.trnberechnung.viewmodel.NautiViewModel
 import java.util.Locale
@@ -99,14 +101,17 @@ import java.util.Locale
  *   the same list the Revier screen renders is what keeps a widget from disagreeing with the tab it
  *   links to.
  * @param onOpenRevier opens the Revier tab on the harbour a widget is showing.
+ * @param tabletExpandedHeight height already bounded by the map overlays and system insets.
  */
 @Composable
 fun NautiDrawer(
     viewModel: NautiViewModel,
     stations: List<TideStationData>,
     onOpenRevier: (String?) -> Unit,
+    tabletExpandedHeight: Dp? = null,
     modifier: Modifier = Modifier,
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val conversations by viewModel.filteredConversations.collectAsStateWithLifecycle()
     val allConversations by viewModel.conversations.collectAsStateWithLifecycle()
@@ -123,12 +128,21 @@ fun NautiDrawer(
         NautiPanelMode.CHAT,
         NautiPanelMode.HISTORY,
         -> {
-            Column(
-                modifier =
-                    modifier
+            val expandedSizeModifier =
+                if (adaptiveLayout.isTablet && tabletExpandedHeight != null) {
+                    Modifier
+                        .fillMaxWidth()
+                        .height(tabletExpandedHeight)
+                } else {
+                    Modifier
                         .fillMaxWidth()
                         .fillMaxHeight(0.76f)
                         .heightIn(min = 420.dp)
+                }
+            Column(
+                modifier =
+                    modifier
+                        .then(expandedSizeModifier)
                         .tideNodeGlass(cornerRadius = 30.dp, elevation = 16.dp, alpha = 0.80f)
                         .testTag("NautiInlinePanel"),
             ) {
@@ -177,26 +191,34 @@ private fun NautiCompactPill(
     modifier: Modifier,
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val adaptiveLayout = currentAdaptiveLayout()
     val titleColor = if (isDark) Color(0xFFF8FAFC) else TideNodeInk
     val subtitleColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF62666C)
+    val pillHeight = if (adaptiveLayout.isTablet) 82.dp else 68.dp
+    val horizontalPadding = if (adaptiveLayout.isTablet) 26.dp else 22.dp
+    val iconSize = if (adaptiveLayout.isTablet) 31.dp else 26.dp
+    val iconSpacing = if (adaptiveLayout.isTablet) 17.dp else 14.dp
+    val titleSize = if (adaptiveLayout.isTablet) 20.sp else 17.sp
+    val subtitleSize = if (adaptiveLayout.isTablet) 16.sp else 13.sp
+    val chevronSize = if (adaptiveLayout.isTablet) 36.sp else 30.sp
 
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
-                .height(68.dp)
-                .tideNodeGlass(cornerRadius = 34.dp, elevation = 10.dp, alpha = 0.85f)
+                .height(pillHeight)
+                .tideNodeGlass(cornerRadius = pillHeight / 2f, elevation = 10.dp, alpha = 0.85f)
                 .clickable(onClick = onClick)
-                .padding(horizontal = 22.dp),
+                .padding(horizontal = horizontalPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Default.AutoAwesome, null, tint = TideNodeCyan, modifier = Modifier.size(26.dp))
-        Spacer(Modifier.width(14.dp))
+        Icon(Icons.Default.AutoAwesome, null, tint = TideNodeCyan, modifier = Modifier.size(iconSize))
+        Spacer(Modifier.width(iconSpacing))
         Column(Modifier.weight(1f)) {
-            Text("Nauti KI", color = titleColor, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp)
-            Text("Törn, Wetter oder Gezeiten", color = subtitleColor, fontSize = 13.sp)
+            Text("Nauti KI", color = titleColor, fontWeight = FontWeight.ExtraBold, fontSize = titleSize)
+            Text("Törn, Wetter oder Gezeiten", color = subtitleColor, fontSize = subtitleSize)
         }
-        Text("›", color = TideNodeCyan, fontWeight = FontWeight.Bold, fontSize = 30.sp)
+        Text("›", color = TideNodeCyan, fontWeight = FontWeight.Bold, fontSize = chevronSize)
     }
 }
 
@@ -251,6 +273,8 @@ private fun NautiChat(
     onSend: (String) -> Unit,
     onConfirmAction: (NautiMessageEntity) -> Unit,
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
+    val compactLandscape = !adaptiveLayout.isTablet && adaptiveLayout.isLandscape
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size, isSending) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
@@ -303,8 +327,12 @@ private fun NautiChat(
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding =
+                PaddingValues(
+                    horizontal = 20.dp,
+                    vertical = if (compactLandscape) 4.dp else 16.dp,
+                ),
+            verticalArrangement = Arrangement.spacedBy(if (compactLandscape) 8.dp else 12.dp),
         ) {
             items(messages, key = NautiMessageEntity::id) { message ->
                 NautiMessageBubble(
@@ -467,6 +495,8 @@ private fun NautiComposer(
     onSend: (String) -> Unit,
 ) {
     val context = LocalContext.current
+    val adaptiveLayout = currentAdaptiveLayout()
+    val compactLandscape = !adaptiveLayout.isTablet && adaptiveLayout.isLandscape
     var text by remember(conversationId) { mutableStateOf(draft) }
     var lastPushed by remember(conversationId) { mutableStateOf(draft) }
 
@@ -515,7 +545,10 @@ private fun NautiComposer(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(
+                    horizontal = 16.dp,
+                    vertical = if (compactLandscape) 6.dp else 12.dp,
+                )
                 .clip(RoundedCornerShape(28.dp))
                 .background(composerBg)
                 .padding(start = 14.dp, end = 6.dp),

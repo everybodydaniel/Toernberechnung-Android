@@ -21,7 +21,7 @@ class PassageWindowScannerTest {
     fun `window containing selected departure wins`() =
         runTest {
             val window =
-                scanner.findSafeWindow(
+                scanner.findSafeWindows(
                     center = center,
                     evaluator =
                         PassageCandidateEvaluator { departure ->
@@ -31,7 +31,7 @@ class PassageWindowScannerTest {
                                         !departure.isAfter(center.plusMinutes(20)),
                             )
                         },
-                )
+                ).firstOrNull()
 
             window?.start shouldBe center.minusMinutes(20)
             window?.end shouldBe center.plusMinutes(20)
@@ -42,7 +42,7 @@ class PassageWindowScannerTest {
     fun `first later window is selected when center is unsafe`() =
         runTest {
             val window =
-                scanner.findSafeWindow(
+                scanner.findSafeWindows(
                     center = center,
                     evaluator =
                         PassageCandidateEvaluator { departure ->
@@ -52,7 +52,7 @@ class PassageWindowScannerTest {
                                         !departure.isAfter(center.plusMinutes(50)),
                             )
                         },
-                )
+                ).firstOrNull()
 
             window?.start shouldBe center.plusMinutes(30)
             window?.end shouldBe center.plusMinutes(50)
@@ -62,7 +62,7 @@ class PassageWindowScannerTest {
     fun `candidate is unsafe if some waypoints have missing data (strict mode)`() =
         runTest {
             val window =
-                scanner.findSafeWindow(
+                scanner.findSafeWindows(
                     center = center,
                     evaluator =
                         PassageCandidateEvaluator {
@@ -76,7 +76,7 @@ class PassageWindowScannerTest {
                                 allLegsValid = true,
                             )
                         },
-                )
+                ).firstOrNull()
 
             window shouldBe null
         }
@@ -109,7 +109,7 @@ class PassageWindowScannerTest {
                     scanIncrement = Duration.ofMinutes(10),
                     scanBackward = Duration.ZERO,
                     scanForward = Duration.ZERO,
-                ).findSafeWindow(
+                ).findSafeWindows(
                     center = center,
                     evaluator =
                         PassageCandidateEvaluator {
@@ -132,7 +132,7 @@ class PassageWindowScannerTest {
                                 allLegsValid = true,
                             )
                         },
-                )
+                ).firstOrNull()
 
             window?.bottleneckName shouldBe "Wattenhoch"
             window?.anchoredHighWater shouldBe highWater
@@ -144,7 +144,7 @@ class PassageWindowScannerTest {
         runTest {
             val margin = 0.5
             val window =
-                scanner.findSafeWindow(
+                scanner.findSafeWindows(
                     center = center,
                     evaluator =
                         PassageCandidateEvaluator { departure ->
@@ -157,7 +157,7 @@ class PassageWindowScannerTest {
                                 safetyMarginMeters = margin
                             )
                         },
-                )
+                ).firstOrNull()
 
             window shouldBe null
         }

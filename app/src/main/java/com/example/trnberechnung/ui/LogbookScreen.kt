@@ -1,6 +1,5 @@
 package com.example.trnberechnung.ui
 
-import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -28,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -83,6 +81,7 @@ fun LogbookScreen(
     val logs by viewModel.allLogs.collectAsState()
     val context = LocalContext.current
     var logToDelete by remember { mutableStateOf<LogbookEntry?>(null) }
+    val adaptiveLayout = currentAdaptiveLayout()
 
     logToDelete?.let { entry ->
         AlertDialog(
@@ -110,22 +109,34 @@ fun LogbookScreen(
         )
     }
 
-    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isLandscape = adaptiveLayout.isLandscape
+    val compactLandscape = isLandscape && !adaptiveLayout.isTablet
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("screen_logbook")
-            .background(MaterialTheme.colorScheme.background)
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .testTag("screen_logbook")
+                .background(MaterialTheme.colorScheme.background),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(modifier = Modifier.height(topOverlayClearance + (if (isLandscape) 2.dp else 4.dp)))
+        Spacer(modifier = Modifier.height(topOverlayClearance + (if (compactLandscape) 2.dp else 4.dp)))
         Text(
             "LOGBUCH",
-            modifier = Modifier
-                .padding(start = 16.dp, top = if (isLandscape) 2.dp else 8.dp, bottom = if (isLandscape) 2.dp else 4.dp)
-                .testTag("screen_header_logbook")
-                .semantics { heading() },
+            modifier =
+                (if (adaptiveLayout.isTablet) {
+                    Modifier.widthIn(max = adaptiveLayout.mainContentMaxWidth).fillMaxWidth()
+                } else {
+                    Modifier.fillMaxWidth()
+                }).padding(
+                    start = if (adaptiveLayout.isTablet) adaptiveLayout.horizontalScreenPadding else 16.dp,
+                    end = if (adaptiveLayout.isTablet) adaptiveLayout.horizontalScreenPadding else 0.dp,
+                    top = if (compactLandscape) 2.dp else 8.dp,
+                    bottom = if (compactLandscape) 2.dp else 4.dp,
+                ).testTag("screen_header_logbook")
+                    .semantics { heading() },
             style = MaterialTheme.typography.labelMedium,
+            fontSize = if (adaptiveLayout.isTablet) 15.sp else MaterialTheme.typography.labelMedium.fontSize,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f), // Slightly higher contrast
             letterSpacing = 1.sp
         )
@@ -156,16 +167,24 @@ fun LogbookScreen(
                     // Column it stretched the empty state by the full bottom-overlay height and
                     // left a large blank area under the button.
                     .padding(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 16.dp,
+                        start = if (adaptiveLayout.isTablet) adaptiveLayout.horizontalScreenPadding else 16.dp,
+                        end = if (adaptiveLayout.isTablet) adaptiveLayout.horizontalScreenPadding else 16.dp,
+                        top = if (adaptiveLayout.isTablet) 20.dp else 16.dp,
                         bottom = maxOf(16.dp, bottomOverlayClearance),
                     ),
                 contentAlignment = Alignment.TopCenter
             ) {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(28.dp),
+                    modifier =
+                        if (adaptiveLayout.isTablet) {
+                            Modifier.widthIn(max = adaptiveLayout.compactContentMaxWidth).fillMaxWidth()
+                        } else {
+                            Modifier.fillMaxWidth()
+                        },
+                    shape =
+                        RoundedCornerShape(
+                            if (adaptiveLayout.isTablet) TabletLayoutTokens.CardCornerRadius else 28.dp,
+                        ),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surface
                     ),
@@ -175,19 +194,24 @@ fun LogbookScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 24.dp),
+                            .padding(
+                                horizontal = if (adaptiveLayout.isTablet) 32.dp else 24.dp,
+                                vertical = if (adaptiveLayout.isTablet) 32.dp else 24.dp,
+                            ),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.MenuBook,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(54.dp)
+                            modifier = Modifier.size(if (adaptiveLayout.isTablet) 68.dp else 54.dp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             "Dein Logbuch ist bereit",
                             style = MaterialTheme.typography.headlineSmall,
+                            fontSize =
+                                if (adaptiveLayout.isTablet) 29.sp else MaterialTheme.typography.headlineSmall.fontSize,
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -195,13 +219,26 @@ fun LogbookScreen(
                         Text(
                             "Speichere eine Planung, zeichne eine Fahrt auf oder erstelle eine leere PDF-Vorlage.",
                             style = MaterialTheme.typography.bodyLarge,
+                            fontSize =
+                                if (adaptiveLayout.isTablet) 19.sp else MaterialTheme.typography.bodyLarge.fontSize,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(20.dp))
                         Button(
                             onClick = createBlankPdf,
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            modifier =
+                                (if (adaptiveLayout.isTablet) {
+                                    Modifier.widthIn(max = 560.dp).fillMaxWidth()
+                                } else {
+                                    Modifier.fillMaxWidth()
+                                }).height(
+                                    if (adaptiveLayout.isTablet) {
+                                        TabletLayoutTokens.PrimaryControlHeight
+                                    } else {
+                                        56.dp
+                                    },
+                                ),
                             shape = RoundedCornerShape(28.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
@@ -210,18 +247,29 @@ fun LogbookScreen(
                         ) {
                             Icon(Icons.Default.AddCircle, contentDescription = null)
                             Spacer(Modifier.width(12.dp))
-                            Text("Leere PDF erstellen", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text(
+                                "Leere PDF erstellen",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = if (adaptiveLayout.isTablet) 21.sp else 18.sp,
+                            )
                         }
                     }
                 }
             }
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .then(
+                            if (adaptiveLayout.isTablet) {
+                                Modifier.widthIn(max = adaptiveLayout.compactContentMaxWidth).fillMaxWidth()
+                            } else {
+                                Modifier.fillMaxWidth()
+                            },
+                        ).padding(horizontal = if (adaptiveLayout.isTablet) 24.dp else 12.dp),
+                verticalArrangement =
+                    Arrangement.spacedBy(if (adaptiveLayout.isTablet) TabletLayoutTokens.SectionSpacing else 12.dp),
                 contentPadding = PaddingValues(
                     bottom = maxOf(16.dp, bottomOverlayClearance)
                 )
@@ -244,15 +292,22 @@ private fun LogbookActionBar(
     logCount: Int,
     onCreateBlankPdf: () -> Unit
 ) {
-    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val adaptiveLayout = currentAdaptiveLayout()
+    val compactLandscape = adaptiveLayout.isLandscape && !adaptiveLayout.isTablet
     // A flat surface with a hairline outline instead of an elevated, semi-transparent one. The
     // drop shadow of the previous version read as a grey box sitting behind a white card, because
     // the card's own fill was almost the same colour as the screen behind it.
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = if (isLandscape) 4.dp else 12.dp),
-        shape = RoundedCornerShape(22.dp),
+        modifier =
+            (if (adaptiveLayout.isTablet) {
+                Modifier.widthIn(max = adaptiveLayout.compactContentMaxWidth).fillMaxWidth()
+            } else {
+                Modifier.fillMaxWidth()
+            }).padding(
+                horizontal = if (adaptiveLayout.isTablet) adaptiveLayout.horizontalScreenPadding else 16.dp,
+                vertical = if (compactLandscape) 4.dp else 12.dp,
+            ),
+        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 26.dp else 22.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
@@ -260,13 +315,21 @@ private fun LogbookActionBar(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
-            modifier = Modifier.padding(start = 16.dp, end = 12.dp, top = if (isLandscape) 6.dp else 14.dp, bottom = if (isLandscape) 6.dp else 14.dp),
+            modifier =
+                Modifier.padding(
+                    start = if (adaptiveLayout.isTablet) 22.dp else 16.dp,
+                    end = if (adaptiveLayout.isTablet) 18.dp else 12.dp,
+                    top = if (adaptiveLayout.isTablet) 16.dp else if (compactLandscape) 6.dp else 14.dp,
+                    bottom = if (adaptiveLayout.isTablet) 16.dp else if (compactLandscape) 6.dp else 14.dp,
+                ),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = if (logCount == 1) "1 Törn" else "$logCount Törns",
                     style = MaterialTheme.typography.headlineSmall,
+                    fontSize =
+                        if (adaptiveLayout.isTablet) 28.sp else MaterialTheme.typography.headlineSmall.fontSize,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -275,6 +338,8 @@ private fun LogbookActionBar(
                     // wording wrapped to two lines and collided with it.
                     "Planungen und Fahrten",
                     style = MaterialTheme.typography.bodySmall,
+                    fontSize =
+                        if (adaptiveLayout.isTablet) 15.sp else MaterialTheme.typography.bodySmall.fontSize,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -287,11 +352,20 @@ private fun LogbookActionBar(
                 // heightIn, not height: the label used to be a hard-wrapped two-liner inside a
                 // fixed 48 dp button, so its second line was simply cut off. The minimum keeps the
                 // touch target accessible without capping the content.
-                modifier = Modifier.heightIn(min = 48.dp)
+                modifier = Modifier.heightIn(min = if (adaptiveLayout.isTablet) 56.dp else 48.dp)
             ) {
-                Icon(Icons.Default.AddCircle, contentDescription = "PDF erstellen", modifier = Modifier.size(20.dp))
+                Icon(
+                    Icons.Default.AddCircle,
+                    contentDescription = "PDF erstellen",
+                    modifier = Modifier.size(if (adaptiveLayout.isTablet) 24.dp else 20.dp),
+                )
                 Spacer(Modifier.width(8.dp))
-                Text("Leere Vorlage", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                Text(
+                    "Leere Vorlage",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = if (adaptiveLayout.isTablet) 16.sp else 13.sp,
+                    maxLines = 1,
+                )
             }
         }
     }
@@ -304,6 +378,7 @@ private fun LogbookOverviewCard(
     onUpdate: (LogbookEntry) -> Unit,
     onCreatePdf: (LogbookEntry) -> Unit
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
     val parsed = remember(log.id, log.details) { LogbookDetails.parse(log.details) }
     var data by remember(log.id) { mutableStateOf(parsed) }
     var detailsExpanded by remember { mutableStateOf(false) }
@@ -317,15 +392,15 @@ private fun LogbookOverviewCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = LogbookCardBg),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 22.dp else 16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(if (adaptiveLayout.isTablet) 22.dp else 16.dp)) {
 
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(if (adaptiveLayout.isTablet) 54.dp else 44.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(LogbookBlueBg),
                     contentAlignment = Alignment.Center
@@ -341,16 +416,31 @@ private fun LogbookOverviewCard(
                     val depTime = data.abfahrt.takeLast(5).takeIf { ":" in it } ?: ""
                     val title = if (depTime.isNotBlank()) "Törn · $formattedDate · $depTime"
                                 else "Törn · $formattedDate"
-                    Text(title, style = MaterialTheme.typography.titleMedium,
-                         fontWeight = FontWeight.Bold, color = NauticalTextPrimary)
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontSize =
+                            if (adaptiveLayout.isTablet) 20.sp else MaterialTheme.typography.titleMedium.fontSize,
+                        fontWeight = FontWeight.Bold,
+                        color = NauticalTextPrimary,
+                    )
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(log.routeDesc, style = MaterialTheme.typography.bodyMedium,
-                         color = NauticalTextSecondary)
+                    Text(
+                        log.routeDesc,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize =
+                            if (adaptiveLayout.isTablet) 17.sp else MaterialTheme.typography.bodyMedium.fontSize,
+                        color = NauticalTextSecondary,
+                    )
                 }
 
-                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(if (adaptiveLayout.isTablet) 48.dp else 32.dp),
+                ) {
                     Icon(Icons.Default.Delete, contentDescription = "Löschen",
-                         tint = NauticalTextSecondary, modifier = Modifier.size(18.dp))
+                         tint = NauticalTextSecondary,
+                         modifier = Modifier.size(if (adaptiveLayout.isTablet) 22.dp else 18.dp))
                 }
             }
 
@@ -515,15 +605,22 @@ private fun LogbookOverviewCard(
 
             Button(
                 onClick = { onCreatePdf(log.copy(details = data.encode())) },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(if (adaptiveLayout.isTablet) 60.dp else 48.dp),
+                shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 18.dp else 12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = LogbookBlue, contentColor = Color.White
                 )
             ) {
                 Text("📄", fontSize = 16.sp)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("PDF erstellen", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(
+                    "PDF erstellen",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = if (adaptiveLayout.isTablet) 18.sp else 15.sp,
+                )
             }
         }
     }
@@ -537,11 +634,12 @@ private fun ExpanderRow(
     onClick: () -> Unit,
     contentDescription: String? = null
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp) // Accessibility
-            .clip(RoundedCornerShape(8.dp))
+            .heightIn(min = if (adaptiveLayout.isTablet) 56.dp else 48.dp) // Accessibility
+            .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 12.dp else 8.dp))
             .clickable(
                 onClickLabel = contentDescription,
                 onClick = onClick
@@ -549,11 +647,20 @@ private fun ExpanderRow(
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(emoji, fontSize = 16.sp, modifier = Modifier.semantics { this.contentDescription = "" })
+        Text(
+            emoji,
+            fontSize = if (adaptiveLayout.isTablet) 20.sp else 16.sp,
+            modifier = Modifier.semantics { this.contentDescription = "" },
+        )
         Spacer(modifier = Modifier.width(8.dp))
-        Text(title, style = MaterialTheme.typography.bodyMedium,
-             fontWeight = FontWeight.Medium, color = NauticalPrimary,
-             modifier = Modifier.weight(1f))
+        Text(
+            title,
+            style = MaterialTheme.typography.bodyMedium,
+            fontSize = if (adaptiveLayout.isTablet) 17.sp else MaterialTheme.typography.bodyMedium.fontSize,
+            fontWeight = FontWeight.Medium,
+            color = NauticalPrimary,
+            modifier = Modifier.weight(1f),
+        )
         Icon(
             if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
             contentDescription = null, tint = NauticalTextSecondary
@@ -569,20 +676,23 @@ private fun ChecklistSection(
     states: List<Boolean>,
     onToggle: (Int, Boolean) -> Unit
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
     val checkedCount = states.count { it }
     Card(
         colors = CardDefaults.cardColors(containerColor = LogbookSubCardBg),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 16.dp else 12.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(if (adaptiveLayout.isTablet) 16.dp else 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(emoji, fontSize = 18.sp)
                 Spacer(Modifier.width(8.dp))
                 Text(title, color = NauticalTextSecondary, letterSpacing = 1.sp,
-                     fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                     fontWeight = FontWeight.Bold,
+                     fontSize = if (adaptiveLayout.isTablet) 16.sp else 13.sp,
                      modifier = Modifier.weight(1f))
                 Text("$checkedCount / ${items.size}",
-                     color = NauticalTextSecondary, fontSize = 12.sp)
+                     color = NauticalTextSecondary,
+                     fontSize = if (adaptiveLayout.isTablet) 14.sp else 12.sp)
             }
             Spacer(Modifier.height(6.dp))
             LinearProgressIndicator(
@@ -595,7 +705,7 @@ private fun ChecklistSection(
             items.forEachIndexed { i, label ->
                 Row(
                     modifier = Modifier.fillMaxWidth()
-                        .heightIn(min = 48.dp) // Touch Target
+                        .heightIn(min = if (adaptiveLayout.isTablet) 56.dp else 48.dp) // Touch Target
                         .clickable(
                             onClickLabel = "Markiere $label als erledigt",
                             onClick = { onToggle(i, !states[i]) }
@@ -612,7 +722,12 @@ private fun ChecklistSection(
                         )
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text(label, color = NauticalTextPrimary, fontWeight = FontWeight.Medium)
+                    Text(
+                        label,
+                        color = NauticalTextPrimary,
+                        fontSize = if (adaptiveLayout.isTablet) 17.sp else LocalTextStyle.current.fontSize,
+                        fontWeight = FontWeight.Medium,
+                    )
                 }
             }
         }
@@ -624,6 +739,7 @@ private fun SummaryChip(
     icon: String, text: String,
     isStatus: Boolean = false, isGo: Boolean = false
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
     val borderColor = when {
         isStatus && isGo -> NauticalGo.copy(alpha = 0.5f)
         isStatus -> NauticalNoGo.copy(alpha = 0.5f)
@@ -641,29 +757,50 @@ private fun SummaryChip(
             brush = androidx.compose.ui.graphics.SolidColor(borderColor)
         )
     ) {
-        Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+        Row(
+            modifier =
+                Modifier.padding(
+                    horizontal = if (adaptiveLayout.isTablet) 14.dp else 10.dp,
+                    vertical = if (adaptiveLayout.isTablet) 8.dp else 5.dp,
+                ),
             verticalAlignment = Alignment.CenterVertically) {
-            Text(icon, fontSize = 13.sp)
+            Text(icon, fontSize = if (adaptiveLayout.isTablet) 16.sp else 13.sp)
             Spacer(modifier = Modifier.width(4.dp))
-            Text(text, style = MaterialTheme.typography.labelMedium,
-                 color = textColor, fontWeight = FontWeight.Medium)
+            Text(
+                text,
+                style = MaterialTheme.typography.labelMedium,
+                fontSize = if (adaptiveLayout.isTablet) 15.sp else MaterialTheme.typography.labelMedium.fontSize,
+                color = textColor,
+                fontWeight = FontWeight.Medium,
+            )
         }
     }
 }
 
 @Composable
 private fun DetailField(label: String, value: String) {
+    val adaptiveLayout = currentAdaptiveLayout()
     Column(
         modifier = Modifier.fillMaxWidth()
             .border(1.dp, LogbookFieldBorder, RoundedCornerShape(12.dp))
             .background(LogbookSubCardBg, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(
+                horizontal = if (adaptiveLayout.isTablet) 18.dp else 14.dp,
+                vertical = if (adaptiveLayout.isTablet) 14.dp else 10.dp,
+            )
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall,
-             color = NauticalTextSecondary, letterSpacing = 1.sp, fontSize = 11.sp)
+             color = NauticalTextSecondary,
+             letterSpacing = 1.sp,
+             fontSize = if (adaptiveLayout.isTablet) 13.sp else 11.sp)
         Spacer(modifier = Modifier.height(2.dp))
-        Text(value, style = MaterialTheme.typography.bodyLarge,
-             color = NauticalTextPrimary, fontWeight = FontWeight.Medium)
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyLarge,
+            fontSize = if (adaptiveLayout.isTablet) 18.sp else MaterialTheme.typography.bodyLarge.fontSize,
+            color = NauticalTextPrimary,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 

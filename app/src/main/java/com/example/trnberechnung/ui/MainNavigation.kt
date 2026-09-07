@@ -1,7 +1,6 @@
 package com.example.trnberechnung.ui
 
 import android.app.Activity
-import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
@@ -13,11 +12,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
@@ -41,8 +43,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -74,6 +76,7 @@ import com.example.trnberechnung.ui.components.GlassIconButton
 import com.example.trnberechnung.ui.components.TideNodeAppHeader
 import com.example.trnberechnung.ui.components.TideNodeBlue
 import com.example.trnberechnung.ui.components.TideNodeInk
+import com.example.trnberechnung.ui.components.tideNodeAppHeaderHeight
 import com.example.trnberechnung.ui.components.tideNodeGlass
 import com.example.trnberechnung.ui.map.MapTabScreen
 import com.example.trnberechnung.ui.navigation.FullScreenNavigationScreen
@@ -176,13 +179,50 @@ fun MainAppScreen(
         application.activeVoyageManager.restoreActiveVoyage()
     }
 
-    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val headerHeight = if (isLandscape) 52.dp else 78.dp
-    val topClearance = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + headerHeight
+    val adaptiveLayout = currentAdaptiveLayout()
+    val isLandscape = adaptiveLayout.isLandscape
+    val safeDrawingPadding = WindowInsets.safeDrawing.asPaddingValues()
+    val layoutDirection = LocalLayoutDirection.current
+    val safeDrawingStart =
+        if (adaptiveLayout.isTablet) {
+            safeDrawingPadding.calculateStartPadding(layoutDirection)
+        } else {
+            0.dp
+        }
+    val safeDrawingEnd =
+        if (adaptiveLayout.isTablet) {
+            safeDrawingPadding.calculateEndPadding(layoutDirection)
+        } else {
+            0.dp
+        }
+    val headerHeight = tideNodeAppHeaderHeight(adaptiveLayout)
+    val topSystemInset =
+        if (adaptiveLayout.isTablet) {
+            safeDrawingPadding.calculateTopPadding()
+        } else {
+            WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        }
+    val topClearance = topSystemInset + headerHeight
     val bottomSystemInset =
-        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomOverlayClearance = if (isLandscape) 54.dp else 88.dp
-    val mapBottomClearance = bottomSystemInset + bottomOverlayClearance
+        if (adaptiveLayout.isTablet) {
+            safeDrawingPadding.calculateBottomPadding()
+        } else {
+            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        }
+    val bottomOverlayClearance =
+        if (adaptiveLayout.isTablet) {
+            bottomSystemInset + bottomNavigationHeight(adaptiveLayout) + bottomNavigationBottomMargin(adaptiveLayout)
+        } else if (isLandscape) {
+            54.dp
+        } else {
+            88.dp
+        }
+    val mapBottomClearance =
+        if (adaptiveLayout.isTablet) {
+            bottomOverlayClearance
+        } else {
+            bottomSystemInset + bottomOverlayClearance
+        }
 
     Box(
         modifier =
@@ -289,47 +329,88 @@ fun MainAppScreen(
                         .testTag("global_app_header"),
             )
 
-            TideNodeBottomNavigation(
-                navController = navController,
-                modifier =
-                    Modifier
-                        .align(if (isLandscape && currentRoute == Screen.MapRoute.route) Alignment.BottomStart else Alignment.BottomCenter)
-                        .then(
-                            if (isLandscape && currentRoute == Screen.MapRoute.route) {
-                                Modifier.fillMaxWidth(0.48f).widthIn(max = 440.dp)
-                            } else {
-                                Modifier.fillMaxWidth()
-                            },
-                        ),
-            )
+            if (adaptiveLayout.isTablet) {
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(start = safeDrawingStart, end = safeDrawingEnd),
+                ) {
+                    TideNodeBottomNavigation(
+                        navController = navController,
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(horizontal = adaptiveLayout.horizontalScreenPadding)
+                                .widthIn(max = adaptiveLayout.compactContentMaxWidth)
+                                .fillMaxWidth(),
+                    )
+                }
+            } else {
+                TideNodeBottomNavigation(
+                    navController = navController,
+                    modifier =
+                        Modifier
+                            .align(if (isLandscape && currentRoute == Screen.MapRoute.route) Alignment.BottomStart else Alignment.BottomCenter)
+                            .then(
+                                if (isLandscape && currentRoute == Screen.MapRoute.route) {
+                                    Modifier.fillMaxWidth(0.48f).widthIn(max = 440.dp)
+                                } else {
+                                    Modifier.fillMaxWidth()
+                                },
+                            ),
+                )
+            }
 
             if (
                 currentRoute == Screen.MapRoute.route &&
                 activeVoyageState is ActiveVoyageState.Active
             ) {
-                ActiveVoyageResumePill(
-                    onClick = {
-                        (context as? Activity)?.let(VoyageServiceController::startFromVisibleActivity)
-                        navController.navigate(Screen.Navigation.route) {
-                            launchSingleTop = true
-                        }
-                    },
-                    modifier =
-                        Modifier
-                            .align(if (isLandscape) Alignment.BottomStart else Alignment.BottomCenter)
-                            .then(
-                                if (isLandscape) {
-                                    Modifier.fillMaxWidth(0.48f).widthIn(max = 440.dp)
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            .padding(
-                                start = 28.dp,
-                                end = 28.dp,
-                                bottom = mapBottomClearance + 8.dp,
-                            ),
-                )
+                val onResumeVoyage = {
+                    (context as? Activity)?.let(VoyageServiceController::startFromVisibleActivity)
+                    navController.navigate(Screen.Navigation.route) {
+                        launchSingleTop = true
+                    }
+                    Unit
+                }
+                if (adaptiveLayout.isTablet) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .padding(start = safeDrawingStart, end = safeDrawingEnd),
+                    ) {
+                        ActiveVoyageResumePill(
+                            onClick = onResumeVoyage,
+                            modifier =
+                                Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(horizontal = adaptiveLayout.horizontalScreenPadding)
+                                    .widthIn(max = adaptiveLayout.overlayMaxWidth)
+                                    .fillMaxWidth()
+                                    .padding(bottom = mapBottomClearance + 8.dp),
+                        )
+                    }
+                } else {
+                    ActiveVoyageResumePill(
+                        onClick = onResumeVoyage,
+                        modifier =
+                            Modifier
+                                .align(if (isLandscape) Alignment.BottomStart else Alignment.BottomCenter)
+                                .then(
+                                    if (isLandscape) {
+                                        Modifier.fillMaxWidth(0.48f).widthIn(max = 440.dp)
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .padding(
+                                    start = 28.dp,
+                                    end = 28.dp,
+                                    bottom = mapBottomClearance + 8.dp,
+                                ),
+                    )
+                }
             }
         }
     }
@@ -351,13 +432,33 @@ private fun SettingsDestination(
     onBack: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val adaptiveLayout = currentAdaptiveLayout()
+    val safeDrawingPadding = WindowInsets.safeDrawing.asPaddingValues()
+    val layoutDirection = LocalLayoutDirection.current
+    val topInset =
+        if (adaptiveLayout.isTablet) {
+            safeDrawingPadding.calculateTopPadding()
+        } else {
+            WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        }
+    val settingsTopBarHeight = if (adaptiveLayout.isTablet) 72.dp else 60.dp
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Box(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(top = topInset + 60.dp),
+                    .then(
+                        if (adaptiveLayout.isTablet) {
+                            Modifier.padding(
+                                start = safeDrawingPadding.calculateStartPadding(layoutDirection),
+                                end = safeDrawingPadding.calculateEndPadding(layoutDirection),
+                                bottom = safeDrawingPadding.calculateBottomPadding(),
+                            )
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .padding(top = topInset + settingsTopBarHeight),
         ) {
             content()
         }
@@ -365,13 +466,42 @@ private fun SettingsDestination(
             icon = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = "Zurück",
             onClick = onBack,
+            size = if (adaptiveLayout.isTablet) 56.dp else 48.dp,
+            iconSize = if (adaptiveLayout.isTablet) TabletLayoutTokens.StandardIconSize else 23.dp,
             modifier =
                 Modifier
-                    .padding(start = 16.dp, top = topInset + 8.dp)
+                    .then(
+                        if (adaptiveLayout.isTablet) {
+                            Modifier.padding(
+                                start =
+                                    safeDrawingPadding.calculateStartPadding(layoutDirection) +
+                                        adaptiveLayout.horizontalScreenPadding,
+                                top = topInset + 8.dp,
+                            )
+                        } else {
+                            Modifier.padding(start = 16.dp, top = topInset + 8.dp)
+                        },
+                    )
                     .testTag("settings_back"),
         )
     }
 }
+
+private fun bottomNavigationHeight(layout: AdaptiveLayout): Dp =
+    when {
+        !layout.isTablet && layout.isLandscape -> 50.dp
+        !layout.isTablet -> 72.dp
+        layout.isLandscape -> 64.dp
+        else -> 84.dp
+    }
+
+private fun bottomNavigationBottomMargin(layout: AdaptiveLayout): Dp =
+    when {
+        !layout.isTablet && layout.isLandscape -> 4.dp
+        !layout.isTablet -> 10.dp
+        layout.isLandscape -> 8.dp
+        else -> 12.dp
+    }
 
 @Composable
 private fun TideNodeBottomNavigation(
@@ -380,26 +510,70 @@ private fun TideNodeBottomNavigation(
 ) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val navHeight = if (isLandscape) 50.dp else 72.dp
-    val itemHeight = if (isLandscape) 44.dp else 62.dp
+    val adaptiveLayout = currentAdaptiveLayout()
+    val isLandscape = adaptiveLayout.isLandscape
+    val bottomInset =
+        if (adaptiveLayout.isTablet) {
+            WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+        } else {
+            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        }
+    val navHeight = bottomNavigationHeight(adaptiveLayout)
+    val itemHeight =
+        when {
+            !adaptiveLayout.isTablet && isLandscape -> 44.dp
+            !adaptiveLayout.isTablet -> 62.dp
+            isLandscape -> 56.dp
+            else -> 72.dp
+        }
+    val outerHorizontalPadding =
+        when {
+            adaptiveLayout.isTablet -> 0.dp
+            isLandscape -> 10.dp
+            else -> 18.dp
+        }
+    val navCornerRadius =
+        when {
+            !adaptiveLayout.isTablet && isLandscape -> 24.dp
+            !adaptiveLayout.isTablet -> 34.dp
+            isLandscape -> 30.dp
+            else -> 40.dp
+        }
+    val itemCornerRadius =
+        when {
+            !adaptiveLayout.isTablet && isLandscape -> 20.dp
+            !adaptiveLayout.isTablet -> 28.dp
+            isLandscape -> 26.dp
+            else -> 34.dp
+        }
+    val innerVerticalPadding =
+        when {
+            !adaptiveLayout.isTablet && isLandscape -> 3.dp
+            !adaptiveLayout.isTablet -> 5.dp
+            isLandscape -> 4.dp
+            else -> 6.dp
+        }
+    val iconSize = if (adaptiveLayout.isTablet) 30.dp else 25.dp
+    val labelSize = if (adaptiveLayout.isTablet) 13.sp else 11.sp
 
     Row(
         modifier =
             modifier
                 .padding(
-                    start = if (isLandscape) 10.dp else 18.dp,
-                    end = if (isLandscape) 10.dp else 18.dp,
-                    bottom = if (isLandscape) bottomInset + 4.dp else bottomInset + 10.dp,
+                    start = outerHorizontalPadding,
+                    end = outerHorizontalPadding,
+                    bottom = bottomInset + bottomNavigationBottomMargin(adaptiveLayout),
                 )
                 .fillMaxWidth()
                 .height(navHeight)
-                .tideNodeGlass(cornerRadius = if (isLandscape) 24.dp else 34.dp, elevation = 14.dp, alpha = 0.80f)
+                .tideNodeGlass(cornerRadius = navCornerRadius, elevation = 14.dp, alpha = 0.80f)
                 .selectableGroup()
-                .padding(horizontal = 8.dp, vertical = if (isLandscape) 3.dp else 5.dp)
+                .padding(
+                    horizontal = if (adaptiveLayout.isTablet) 12.dp else 8.dp,
+                    vertical = innerVerticalPadding,
+                )
                 .testTag("global_bottom_navigation"),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (adaptiveLayout.isTablet) 4.dp else 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         bottomNavItems.forEach { screen ->
@@ -416,7 +590,7 @@ private fun TideNodeBottomNavigation(
                                 } else {
                                     Color.Transparent
                                 },
-                            shape = RoundedCornerShape(if (isLandscape) 20.dp else 28.dp),
+                            shape = RoundedCornerShape(itemCornerRadius),
                         )
                         .selectable(
                             selected = selected,
@@ -431,13 +605,13 @@ private fun TideNodeBottomNavigation(
                     imageVector = screen.icon,
                     contentDescription = null,
                     tint = if (selected) TideNodeBlue else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(25.dp).testTag("nav_icon_${screen.route}"),
+                    modifier = Modifier.size(iconSize).testTag("nav_icon_${screen.route}"),
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(if (adaptiveLayout.isTablet) 3.dp else 2.dp))
                 Text(
                     text = screen.title,
                     color = if (selected) TideNodeBlue else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
+                    fontSize = labelSize,
                     fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
                     modifier = Modifier.testTag("nav_text_${screen.route}")
                 )

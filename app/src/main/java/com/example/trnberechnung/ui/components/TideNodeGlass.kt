@@ -101,6 +101,7 @@ fun GlassIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     size: Dp = 48.dp,
+    iconSize: Dp = 23.dp,
     iconTint: Color = Color.Unspecified,
     badge: (@Composable BoxScope.() -> Unit)? = null,
 ) {
@@ -132,7 +133,7 @@ fun GlassIconButton(
                 imageVector = icon,
                 contentDescription = contentDescription,
                 tint = resolvedTint,
-                modifier = Modifier.size(23.dp),
+                modifier = Modifier.size(iconSize),
             )
         }
         badge?.invoke(this)

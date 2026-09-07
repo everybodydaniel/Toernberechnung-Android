@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.trnberechnung.dto.WeatherDto
 import com.example.trnberechnung.logic.TideTimes
 import com.example.trnberechnung.model.TideEvent
@@ -61,6 +63,7 @@ fun WeatherScreen(
     topOverlayClearance: Dp = 0.dp,
     bottomOverlayClearance: Dp = 0.dp
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
     var selectedTab by remember { mutableStateOf(0) } // 0 = Wetter, 1 = Gezeiten
     val weather by viewModel.currentWeather.collectAsState()
     val forecast by viewModel.forecastData.collectAsState()
@@ -70,7 +73,8 @@ fun WeatherScreen(
     val lastWeatherUpdate by viewModel.lastWeatherUpdate.collectAsState()
     var showStationDialog by remember { mutableStateOf(false) }
 
-    val scrollState = rememberScrollState()
+    val weatherScrollState = rememberScrollState()
+    val tideScrollState = rememberScrollState()
 
     val dailyForecast = remember(forecast) { aggregateToDays(forecast) }
 
@@ -89,8 +93,29 @@ fun WeatherScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Spacer(modifier = Modifier.height(topOverlayClearance + 6.dp))
-            WeatherTabSwitcher(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
-            Spacer(modifier = Modifier.height(12.dp))
+            if (adaptiveLayout.isTablet) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = adaptiveLayout.horizontalScreenPadding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    WeatherTabSwitcher(
+                        selectedTab = selectedTab,
+                        onTabSelected = { selectedTab = it },
+                        modifier = Modifier
+                            .widthIn(max = adaptiveLayout.compactContentMaxWidth)
+                            .fillMaxWidth()
+                    )
+                }
+            } else {
+                WeatherTabSwitcher(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
+            }
+            Spacer(
+                modifier = Modifier.height(
+                    if (adaptiveLayout.isTablet) TabletLayoutTokens.SectionSpacing else 12.dp
+                )
+            )
 
             Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedContent(
@@ -109,36 +134,91 @@ fun WeatherScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .verticalScroll(scrollState)
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                                .verticalScroll(
+                                    if (targetTab == 0) weatherScrollState else tideScrollState,
+                                )
+                                .padding(
+                                    if (adaptiveLayout.isTablet) {
+                                        PaddingValues(
+                                            horizontal = adaptiveLayout.horizontalScreenPadding,
+                                            vertical = TabletLayoutTokens.CardPadding
+                                        )
+                                    } else {
+                                        PaddingValues(16.dp)
+                                    }
+                                ),
+                            horizontalAlignment = if (adaptiveLayout.isTablet) {
+                                Alignment.CenterHorizontally
+                            } else {
+                                Alignment.Start
+                            },
+                            verticalArrangement = Arrangement.spacedBy(
+                                if (adaptiveLayout.isTablet) TabletLayoutTokens.SectionSpacing else 16.dp
+                            )
                         ) {
-                            if (targetTab == 0) {
-                                val isLoading by viewModel.weatherLoading.collectAsState()
-                                // Only a cold start shows the skeleton. The app reloads itself
-                                // every few minutes, and blanking the whole tab each time would
-                                // make it look broken.
-                                if (isLoading && weather == null) {
-                                    WeatherSkeleton()
-                                } else {
-                                    WeatherContent(
-                                        stationName = selectedStation?.gaugeLabel ?: "Standort wählen",
-                                        weather = weather,
-                                        forecast = forecast,
-                                        dailyForecast = dailyForecast,
-                                        lastUpdated = lastWeatherUpdate,
-                                        onStationClick = { showStationDialog = true },
-                                        viewModel = viewModel
-                                    )
+                            if (adaptiveLayout.isTablet) {
+                                Column(
+                                    modifier = Modifier
+                                        .widthIn(max = adaptiveLayout.mainContentMaxWidth)
+                                        .fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(TabletLayoutTokens.SectionSpacing)
+                                ) {
+                                    if (targetTab == 0) {
+                                        val isLoading by viewModel.weatherLoading.collectAsState()
+                                        // Only a cold start shows the skeleton. The app reloads itself
+                                        // every few minutes, and blanking the whole tab each time would
+                                        // make it look broken.
+                                        if (isLoading && weather == null) {
+                                            WeatherSkeleton()
+                                        } else {
+                                            WeatherContent(
+                                                stationName = selectedStation?.gaugeLabel ?: "Standort wählen",
+                                                weather = weather,
+                                                forecast = forecast,
+                                                dailyForecast = dailyForecast,
+                                                lastUpdated = lastWeatherUpdate,
+                                                onStationClick = { showStationDialog = true },
+                                                viewModel = viewModel
+                                            )
+                                        }
+                                    } else {
+                                        val tideLoading by viewModel.tideLoading.collectAsState()
+                                        TideContent(
+                                            station = selectedStation,
+                                            events = tideEvents,
+                                            loading = tideLoading,
+                                            onStationClick = { showStationDialog = true }
+                                        )
+                                    }
                                 }
                             } else {
-                                val tideLoading by viewModel.tideLoading.collectAsState()
-                                TideContent(
-                                    station = selectedStation,
-                                    events = tideEvents,
-                                    loading = tideLoading,
-                                    onStationClick = { showStationDialog = true }
-                                )
+                                if (targetTab == 0) {
+                                    val isLoading by viewModel.weatherLoading.collectAsState()
+                                    // Only a cold start shows the skeleton. The app reloads itself
+                                    // every few minutes, and blanking the whole tab each time would
+                                    // make it look broken.
+                                    if (isLoading && weather == null) {
+                                        WeatherSkeleton()
+                                    } else {
+                                        WeatherContent(
+                                            stationName = selectedStation?.gaugeLabel ?: "Standort wählen",
+                                            weather = weather,
+                                            forecast = forecast,
+                                            dailyForecast = dailyForecast,
+                                            lastUpdated = lastWeatherUpdate,
+                                            onStationClick = { showStationDialog = true },
+                                            viewModel = viewModel
+                                        )
+                                    }
+                                } else {
+                                    val tideLoading by viewModel.tideLoading.collectAsState()
+                                    TideContent(
+                                        station = selectedStation,
+                                        events = tideEvents,
+                                        loading = tideLoading,
+                                        onStationClick = { showStationDialog = true }
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.height(maxOf(32.dp, bottomOverlayClearance)))
                         }
@@ -188,18 +268,35 @@ private fun rememberFreshnessLabel(lastUpdated: Long?): String {
 }
 
 @Composable
-fun WeatherTabSwitcher(selectedTab: Int, onTabSelected: (Int) -> Unit) {
+fun WeatherTabSwitcher(
+    selectedTab: Int,
+    onTabSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isTablet = currentAdaptiveLayout().isTablet
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .height(48.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color.White.copy(alpha = 0.15f))
-            .padding(4.dp)
-            .semantics {
-                contentDescription = "Ansicht auswählen"
-            }
+        modifier = if (isTablet) {
+            modifier
+                .fillMaxWidth()
+                .height(TabletLayoutTokens.PrimaryControlHeight)
+                .clip(RoundedCornerShape(30.dp))
+                .background(Color.White.copy(alpha = 0.15f))
+                .padding(5.dp)
+                .semantics {
+                    contentDescription = "Ansicht auswählen"
+                }
+        } else {
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .height(48.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color.White.copy(alpha = 0.15f))
+                .padding(4.dp)
+                .semantics {
+                    contentDescription = "Ansicht auswählen"
+                }
+        }
     ) {
         TabItem(
             text = "Wetter",
@@ -220,10 +317,11 @@ fun WeatherTabSwitcher(selectedTab: Int, onTabSelected: (Int) -> Unit) {
 
 @Composable
 fun TabItem(text: String, icon: String, isSelected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val isTablet = currentAdaptiveLayout().isTablet
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(if (isTablet) 25.dp else 20.dp))
             .background(if (isSelected) Color.White.copy(alpha = 0.2f) else Color.Transparent)
             .clickable(
                 onClickLabel = "$text anzeigen",
@@ -232,13 +330,17 @@ fun TabItem(text: String, icon: String, isSelected: Boolean, modifier: Modifier,
         contentAlignment = Alignment.Center
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(icon, fontSize = 14.sp, modifier = Modifier.semantics { contentDescription = "" })
-            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                icon,
+                fontSize = if (isTablet) 17.sp else 14.sp,
+                modifier = Modifier.semantics { contentDescription = "" }
+            )
+            Spacer(modifier = Modifier.width(if (isTablet) 8.dp else 6.dp))
             Text(
                 text,
                 color = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f),
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                fontSize = 14.sp
+                fontSize = if (isTablet) 17.sp else 14.sp
             )
         }
     }
@@ -254,6 +356,7 @@ fun WeatherContent(
     onStationClick: () -> Unit,
     viewModel: TideViewModel
 ) {
+    val isTablet = currentAdaptiveLayout().isTablet
     val nowBerlin = remember { LocalDateTime.now(ZoneId.of("Europe/Berlin")) }
     val filteredForecast = remember(forecast) {
         val now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Europe/Berlin"))
@@ -273,7 +376,7 @@ fun WeatherContent(
     // Hero Weather
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(if (isTablet) TabletLayoutTokens.CardPadding else 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
@@ -286,7 +389,7 @@ fun WeatherContent(
             ) {
                 Text(
                     stationName,
-                    fontSize = 32.sp,
+                    fontSize = if (isTablet) 38.sp else 32.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                     textAlign = TextAlign.Center
@@ -294,13 +397,14 @@ fun WeatherContent(
                 Icon(
                     Icons.Default.KeyboardArrowDown,
                     contentDescription = "Standort wählen",
-                    tint = Color.White.copy(alpha = 0.7f)
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = if (isTablet) Modifier.size(TabletLayoutTokens.StandardIconSize) else Modifier
                 )
             }
             Text(
                 "${weather?.temperature?.toInt() ?: "--"}°",
                 modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Aktuelle Temperatur: ${weather?.temperature?.toInt() ?: "--"} Grad" },
-                fontSize = 86.sp,
+                fontSize = if (isTablet) 102.sp else 86.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color.White,
                 textAlign = TextAlign.Center
@@ -308,7 +412,7 @@ fun WeatherContent(
             Text(
                 translateCondition(weather?.condition),
                 modifier = Modifier.fillMaxWidth(),
-                fontSize = 22.sp,
+                fontSize = if (isTablet) 27.sp else 22.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color.White.copy(alpha = 0.95f),
                 textAlign = TextAlign.Center
@@ -319,7 +423,7 @@ fun WeatherContent(
                     "Höchstwert: ${today.highTemp}°  Tiefstwert: ${today.lowTemp}°",
                     modifier = Modifier.fillMaxWidth(),
                     color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 15.sp,
+                    fontSize = if (isTablet) 18.sp else 15.sp,
                     textAlign = TextAlign.Center
                 )
             }
@@ -327,9 +431,9 @@ fun WeatherContent(
                 "Gefühlt ${weather?.dewPoint?.toInt() ?: "--"}° · ${rememberFreshnessLabel(lastUpdated)}",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
+                    .padding(top = if (isTablet) 10.dp else 8.dp),
                 color = Color.White.copy(alpha = 0.6f),
-                fontSize = 12.sp,
+                fontSize = if (isTablet) 15.sp else 12.sp,
                 textAlign = TextAlign.Center
             )
         }
@@ -337,21 +441,26 @@ fun WeatherContent(
 
     // Hourly Forecast
     GlassCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(if (isTablet) TabletLayoutTokens.CardPadding else 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Info, "Vorhersage Info", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    Icons.Default.Info,
+                    "Vorhersage Info",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(if (isTablet) 18.dp else 14.dp)
+                )
+                Spacer(modifier = Modifier.width(if (isTablet) 8.dp else 6.dp))
                 Text(
                     "48-STUNDEN-VORHERSAGE",
-                    fontSize = 10.sp,
+                    fontSize = if (isTablet) 12.sp else 10.sp,
                     color = Color.White.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.semantics { heading() }
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(if (isTablet) 16.dp else 12.dp))
             LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (isTablet) 24.dp else 20.dp),
                 modifier = Modifier.semantics { contentDescription = "Stündliche Vorhersage" }
             ) {
                 items(filteredForecast.take(24)) { hour ->
@@ -360,18 +469,35 @@ fun WeatherContent(
                     } catch (e: Exception) { "--:--" }
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.semantics(mergeDescendants = true) {}
+                        modifier = Modifier
+                            .then(if (isTablet) Modifier.widthIn(min = 72.dp) else Modifier)
+                            .semantics(mergeDescendants = true) {}
                     ) {
-                        Text(time, color = Color.White, fontSize = 12.sp)
+                        Text(time, color = Color.White, fontSize = if (isTablet) 15.sp else 12.sp)
                         Text(
                             iconToEmoji(hour.icon ?: hour.condition),
-                            fontSize = 24.sp,
-                            modifier = Modifier.padding(vertical = 4.dp).semantics { contentDescription = translateCondition(hour.condition) }
+                            fontSize = if (isTablet) 30.sp else 24.sp,
+                            modifier = Modifier
+                                .padding(vertical = if (isTablet) 6.dp else 4.dp)
+                                .semantics { contentDescription = translateCondition(hour.condition) }
                         )
-                        Text("${hour.temperature?.toInt() ?: "--"}°", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("${(hour.windSpeed?.div(1.852))?.toInt() ?: "--"} kn", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
-                        Text("B ${(hour.windGustSpeed?.div(1.852))?.toInt() ?: "--"}", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
+                        Text(
+                            "${hour.temperature?.toInt() ?: "--"}°",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = if (isTablet) 17.sp else 14.sp
+                        )
+                        Spacer(modifier = Modifier.height(if (isTablet) 6.dp else 4.dp))
+                        Text(
+                            "${(hour.windSpeed?.div(1.852))?.toInt() ?: "--"} kn",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = if (isTablet) 12.sp else 10.sp
+                        )
+                        Text(
+                            "B ${(hour.windGustSpeed?.div(1.852))?.toInt() ?: "--"}",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = if (isTablet) 12.sp else 10.sp
+                        )
                     }
                 }
             }
@@ -380,19 +506,24 @@ fun WeatherContent(
 
     // Wind Compass & Details
     GlassCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(if (isTablet) TabletLayoutTokens.CardPadding else 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Air, "Wind Icon", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    Icons.Default.Air,
+                    "Wind Icon",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(if (isTablet) 18.dp else 14.dp)
+                )
+                Spacer(modifier = Modifier.width(if (isTablet) 8.dp else 6.dp))
                 Text(
                     "WIND IM REVIER",
-                    fontSize = 10.sp,
+                    fontSize = if (isTablet) 12.sp else 10.sp,
                     color = Color.White.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.semantics { heading() }
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(if (isTablet) 20.dp else 16.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -404,11 +535,17 @@ fun WeatherContent(
                     },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(modifier = Modifier.size(110.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.size(if (isTablet) 136.dp else 110.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     WindCompass(degrees = weather?.windDirection ?: 0)
                 }
-                Spacer(modifier = Modifier.width(24.dp))
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spacer(modifier = Modifier.width(if (isTablet) 32.dp else 24.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(if (isTablet) 10.dp else 8.dp)
+                ) {
                     WindDetailRow("Grundwind", "${(weather?.windSpeed?.div(1.852))?.toInt() ?: "--"} kn")
                     WindDetailRow("Böen", "${(weather?.windGustSpeed?.div(1.852))?.toInt() ?: "--"} kn")
                     WindDetailRow("Richtung", "${windDirectionToText(weather?.windDirection ?: 0)} · ${weather?.windDirection ?: 0}°")
@@ -421,13 +558,18 @@ fun WeatherContent(
     var selectedWindHour by remember { mutableStateOf(0) }
 
     GlassCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(if (isTablet) TabletLayoutTokens.CardPadding else 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Map, "Karte", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    Icons.Default.Map,
+                    "Karte",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(if (isTablet) 18.dp else 14.dp)
+                )
+                Spacer(modifier = Modifier.width(if (isTablet) 8.dp else 6.dp))
                 Text(
                     "WINDKARTE OSTFRIESLAND",
-                    fontSize = 10.sp,
+                    fontSize = if (isTablet) 12.sp else 10.sp,
                     color = Color.White.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.semantics { heading() }
@@ -435,9 +577,9 @@ fun WeatherContent(
             }
 
             // Time Selector for Wind Map
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(if (isTablet) 16.dp else 12.dp))
             LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (isTablet) 12.dp else 8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .semantics { contentDescription = "Zeitpunkt für Windkarte wählen" }
@@ -459,27 +601,48 @@ fun WeatherContent(
 
                     Column(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
+                            .then(
+                                if (isTablet) {
+                                    Modifier
+                                        .widthIn(min = 72.dp)
+                                        .heightIn(min = 48.dp)
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .clip(RoundedCornerShape(if (isTablet) 24.dp else 20.dp))
                             .background(if (selectedWindHour == i) Color.White.copy(alpha = 0.2f) else Color.Transparent)
                             .clickable(
                                 onClickLabel = "Windkarte für $time anzeigen",
                                 onClick = { selectedWindHour = i }
                             )
-                            .padding(horizontal = 12.dp, vertical = 8.dp), // Increased vertical padding for touch target
+                            .padding(
+                                horizontal = if (isTablet) 16.dp else 12.dp,
+                                vertical = if (isTablet) 10.dp else 8.dp
+                            ), // Increased vertical padding for touch target
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(day, color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
-                        Text(time, color = Color.White, fontSize = 12.sp, fontWeight = if (selectedWindHour == i) FontWeight.Bold else FontWeight.Normal)
+                        Text(
+                            day,
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = if (isTablet) 12.sp else 10.sp
+                        )
+                        Text(
+                            time,
+                            color = Color.White,
+                            fontSize = if (isTablet) 15.sp else 12.sp,
+                            fontWeight = if (selectedWindHour == i) FontWeight.Bold else FontWeight.Normal
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(if (isTablet) 16.dp else 12.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(250.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .height(if (isTablet) 310.dp else 250.dp)
+                    .clip(RoundedCornerShape(if (isTablet) 18.dp else 12.dp))
                     .background(Color.White.copy(alpha = 0.05f)),
                 contentAlignment = Alignment.Center
             ) {
@@ -498,27 +661,42 @@ fun WeatherContent(
 
     // Wind & Böen Graph
     GlassCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(if (isTablet) TabletLayoutTokens.CardPadding else 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Timeline, "Graph", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    Icons.Default.Timeline,
+                    "Graph",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(if (isTablet) 18.dp else 14.dp)
+                )
+                Spacer(modifier = Modifier.width(if (isTablet) 8.dp else 6.dp))
                 Text(
                     "WIND UND BÖEN",
-                    fontSize = 10.sp,
+                    fontSize = if (isTablet) 12.sp else 10.sp,
                     color = Color.White.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.semantics { heading() }
                 )
             }
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(if (isTablet) 8.dp else 6.dp))
             Row(
-                modifier = Modifier.padding(start = 40.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier.padding(start = if (isTablet) 48.dp else 40.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (isTablet) 20.dp else 16.dp)
             ) {
-                Text("● GRUNDWIND", color = Color(0xFF4FC3F7), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text("● BÖEN", color = Color(0xFFFFB74D), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "● GRUNDWIND",
+                    color = Color(0xFF4FC3F7),
+                    fontSize = if (isTablet) 12.sp else 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "● BÖEN",
+                    color = Color(0xFFFFB74D),
+                    fontSize = if (isTablet) 12.sp else 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(if (isTablet) 30.dp else 24.dp))
             Box(modifier = Modifier.semantics { contentDescription = "Grafik der Wind- und Böenvorhersage für die nächsten 12 Stunden." }) {
                 WindGustGraph(filteredForecast.take(12))
             }
@@ -528,19 +706,24 @@ fun WeatherContent(
     // 7-Day Forecast
     if (dailyForecast.isNotEmpty()) {
         GlassCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(if (isTablet) TabletLayoutTokens.CardPadding else 16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.DateRange, "Kalender", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        Icons.Default.DateRange,
+                        "Kalender",
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(if (isTablet) 18.dp else 14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(if (isTablet) 8.dp else 6.dp))
                     Text(
                         "7-TAGE-VORHERSAGE",
-                        fontSize = 10.sp,
+                        fontSize = if (isTablet) 12.sp else 10.sp,
                         color = Color.White.copy(alpha = 0.7f),
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.semantics { heading() }
                     )
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(if (isTablet) 16.dp else 12.dp))
                 val weekMin = dailyForecast.minOf { it.lowTemp }
                 val weekMax = dailyForecast.maxOf { it.highTemp }
                 dailyForecast.forEachIndexed { index, day ->
@@ -554,6 +737,7 @@ fun WeatherContent(
 
 @Composable
 fun WindCompass(degrees: Int) {
+    val isTablet = currentAdaptiveLayout().isTablet
     Canvas(modifier = Modifier.fillMaxSize()) {
         val center = Offset(size.width / 2, size.height / 2)
         val radius = size.minDimension / 2
@@ -568,19 +752,39 @@ fun WindCompass(degrees: Int) {
         // Cardinal directions
         val paint = android.graphics.Paint().apply {
             color = android.graphics.Color.WHITE
-            textSize = 10.sp.toPx()
+            textSize = (if (isTablet) 12.sp else 10.sp).toPx()
             textAlign = android.graphics.Paint.Align.CENTER
             alpha = 150
         }
 
-        drawContext.canvas.nativeCanvas.drawText("N", center.x, center.y - radius + 15.dp.toPx(), paint)
-        drawContext.canvas.nativeCanvas.drawText("S", center.x, center.y + radius - 5.dp.toPx(), paint)
-        drawContext.canvas.nativeCanvas.drawText("W", center.x - radius + 10.dp.toPx(), center.y + 5.dp.toPx(), paint)
-        drawContext.canvas.nativeCanvas.drawText("O", center.x + radius - 10.dp.toPx(), center.y + 5.dp.toPx(), paint)
+        drawContext.canvas.nativeCanvas.drawText(
+            "N",
+            center.x,
+            center.y - radius + (if (isTablet) 18.dp else 15.dp).toPx(),
+            paint
+        )
+        drawContext.canvas.nativeCanvas.drawText(
+            "S",
+            center.x,
+            center.y + radius - (if (isTablet) 6.dp else 5.dp).toPx(),
+            paint
+        )
+        drawContext.canvas.nativeCanvas.drawText(
+            "W",
+            center.x - radius + (if (isTablet) 12.dp else 10.dp).toPx(),
+            center.y + (if (isTablet) 6.dp else 5.dp).toPx(),
+            paint
+        )
+        drawContext.canvas.nativeCanvas.drawText(
+            "O",
+            center.x + radius - (if (isTablet) 12.dp else 10.dp).toPx(),
+            center.y + (if (isTablet) 6.dp else 5.dp).toPx(),
+            paint
+        )
 
         // Arrow
         val angleRad = (degrees - 90) * PI / 180.0
-        val arrowLen = radius - 20.dp.toPx()
+        val arrowLen = radius - (if (isTablet) 24.dp else 20.dp).toPx()
         val endX = center.x + (arrowLen * cos(angleRad)).toFloat()
         val endY = center.y + (arrowLen * sin(angleRad)).toFloat()
 
@@ -588,45 +792,55 @@ fun WindCompass(degrees: Int) {
             color = Color(0xFF4FC3F7),
             start = center,
             end = Offset(endX, endY),
-            strokeWidth = 3.dp.toPx(),
+            strokeWidth = (if (isTablet) 3.5.dp else 3.dp).toPx(),
             cap = StrokeCap.Round
         )
 
         drawCircle(
             color = Color.White,
-            radius = 4.dp.toPx(),
+            radius = (if (isTablet) 5.dp else 4.dp).toPx(),
             center = center
         )
 
         // Direction label in center
         val centerPaint = android.graphics.Paint().apply {
             color = android.graphics.Color.WHITE
-            textSize = 14.sp.toPx()
+            textSize = (if (isTablet) 17.sp else 14.sp).toPx()
             textAlign = android.graphics.Paint.Align.CENTER
             isFakeBoldText = true
         }
-        drawContext.canvas.nativeCanvas.drawText(windDirectionToText(degrees), center.x, center.y + 30.dp.toPx(), centerPaint)
+        drawContext.canvas.nativeCanvas.drawText(
+            windDirectionToText(degrees),
+            center.x,
+            center.y + (if (isTablet) 36.dp else 30.dp).toPx(),
+            centerPaint
+        )
     }
 }
 
 @Composable
 fun WindGustGraph(forecast: List<WeatherDto>) {
+    val isTablet = currentAdaptiveLayout().isTablet
     val density = LocalDensity.current
-    val labelTextSize = with(density) { 10.sp.toPx() }
+    val labelTextSize = with(density) { (if (isTablet) 12.sp else 10.sp).toPx() }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(160.dp)
-            .padding(start = 40.dp, end = 16.dp, bottom = 20.dp) // Adjusted padding for labels
+            .height(if (isTablet) 200.dp else 160.dp)
+            .padding(
+                start = if (isTablet) 48.dp else 40.dp,
+                end = if (isTablet) 20.dp else 16.dp,
+                bottom = if (isTablet) 24.dp else 20.dp
+            ) // Adjusted padding for labels
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             if (forecast.isEmpty()) return@Canvas
 
             val width = size.width
             val height = size.height
-            val plotPaddingTop = 10.dp.toPx()
-            val plotPaddingBottom = 20.dp.toPx()
+            val plotPaddingTop = (if (isTablet) 12.dp else 10.dp).toPx()
+            val plotPaddingBottom = (if (isTablet) 24.dp else 20.dp).toPx()
             val plotHeight = height - plotPaddingTop - plotPaddingBottom
             val plotBottomY = height - plotPaddingBottom
 
@@ -660,7 +874,7 @@ fun WindGustGraph(forecast: List<WeatherDto>) {
                     )
                     drawContext.canvas.nativeCanvas.drawText(
                         "${step.toInt()} kn",
-                        -8.dp.toPx(),
+                        -(if (isTablet) 10.dp else 8.dp).toPx(),
                         yPos + labelTextSize / 3,
                         labelPaint
                     )
@@ -686,7 +900,14 @@ fun WindGustGraph(forecast: List<WeatherDto>) {
                 for (i in 1 until forecast.size) {
                     windPath.lineTo(i * stepX, y(windSpeeds[i]))
                 }
-                drawPath(windPath, color = Color(0xFF4FC3F7), style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+                drawPath(
+                    windPath,
+                    color = Color(0xFF4FC3F7),
+                    style = Stroke(
+                        width = (if (isTablet) 2.5.dp else 2.dp).toPx(),
+                        cap = StrokeCap.Round
+                    )
+                )
 
                 // Gust line
                 val gustPath = Path()
@@ -698,7 +919,7 @@ fun WindGustGraph(forecast: List<WeatherDto>) {
                     gustPath,
                     color = Color(0xFFFFB74D),
                     style = Stroke(
-                        width = 2.dp.toPx(),
+                        width = (if (isTablet) 2.5.dp else 2.dp).toPx(),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f),
                         cap = StrokeCap.Round
                     )
@@ -724,7 +945,7 @@ fun WindGustGraph(forecast: List<WeatherDto>) {
                     drawContext.canvas.nativeCanvas.drawText(
                         timeText,
                         x,
-                        height + 12.dp.toPx(),
+                        height + (if (isTablet) 15.dp else 12.dp).toPx(),
                         timePaint
                     )
                 }
@@ -735,6 +956,7 @@ fun WindGustGraph(forecast: List<WeatherDto>) {
 
 @Composable
 fun WeatherWeekForecastRow(day: DailyForecast, weekMin: Int, weekMax: Int) {
+    val isTablet = currentAdaptiveLayout().isTablet
     var expanded by remember { mutableStateOf(false) }
     val range = (weekMax - weekMin).coerceAtLeast(1).toFloat()
     val startFrac = ((day.lowTemp - weekMin) / range).coerceIn(0f, 1f)
@@ -744,21 +966,53 @@ fun WeatherWeekForecastRow(day: DailyForecast, weekMin: Int, weekMax: Int) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = !expanded }
-            .padding(vertical = 4.dp)
+            .then(if (isTablet) Modifier.heightIn(min = 56.dp) else Modifier)
+            .padding(vertical = if (isTablet) 6.dp else 4.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = if (isTablet) 10.dp else 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(day.dayLabel, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp, modifier = Modifier.width(40.dp))
-            Text(iconToEmoji(day.condition), fontSize = 20.sp, modifier = Modifier.width(32.dp))
+            Text(
+                day.dayLabel,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                fontSize = if (isTablet) 17.sp else 14.sp,
+                modifier = Modifier.width(if (isTablet) 50.dp else 40.dp)
+            )
+            Text(
+                iconToEmoji(day.condition),
+                fontSize = if (isTablet) 25.sp else 20.sp,
+                modifier = Modifier.width(if (isTablet) 40.dp else 32.dp)
+            )
             if (day.maxPrecipProb > 0) {
-                Text("${day.maxPrecipProb}%", color = Color(0xFF4FC3F7), fontSize = 10.sp, modifier = Modifier.width(36.dp), fontWeight = FontWeight.Bold)
+                Text(
+                    "${day.maxPrecipProb}%",
+                    color = Color(0xFF4FC3F7),
+                    fontSize = if (isTablet) 12.sp else 10.sp,
+                    modifier = Modifier.width(if (isTablet) 44.dp else 36.dp),
+                    fontWeight = FontWeight.Bold
+                )
             } else {
-                Spacer(modifier = Modifier.width(36.dp))
+                Spacer(modifier = Modifier.width(if (isTablet) 44.dp else 36.dp))
             }
-            Text("${day.lowTemp}°", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, modifier = Modifier.width(30.dp), textAlign = TextAlign.End)
-            Box(modifier = Modifier.weight(1f).padding(horizontal = 8.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.1f))) {
+            Text(
+                "${day.lowTemp}°",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = if (isTablet) 16.sp else 13.sp,
+                modifier = Modifier.width(if (isTablet) 38.dp else 30.dp),
+                textAlign = TextAlign.End
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = if (isTablet) 10.dp else 8.dp)
+                    .height(if (isTablet) 5.dp else 4.dp)
+                    .clip(RoundedCornerShape(if (isTablet) 3.dp else 2.dp))
+                    .background(Color.White.copy(alpha = 0.1f))
+            ) {
                 val cs: Array<Pair<Float, Color>> = arrayOf(
                     0f to Color.Transparent,
                     startFrac to Color.Transparent,
@@ -769,14 +1023,23 @@ fun WeatherWeekForecastRow(day: DailyForecast, weekMin: Int, weekMax: Int) {
                 )
                 Box(modifier = Modifier.fillMaxSize().background(Brush.horizontalGradient(colorStops = cs)))
             }
-            Text("${day.highTemp}°", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp, modifier = Modifier.width(30.dp), textAlign = TextAlign.End)
+            Text(
+                "${day.highTemp}°",
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                fontSize = if (isTablet) 16.sp else 13.sp,
+                modifier = Modifier.width(if (isTablet) 38.dp else 30.dp),
+                textAlign = TextAlign.End
+            )
 
             val rotation by animateFloatAsState(if (expanded) 90f else 0f)
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 null,
                 tint = Color.White.copy(alpha = 0.3f),
-                modifier = Modifier.size(16.dp).graphicsLayer(rotationZ = rotation)
+                modifier = Modifier
+                    .size(if (isTablet) 20.dp else 16.dp)
+                    .graphicsLayer(rotationZ = rotation)
             )
         }
 
@@ -784,10 +1047,17 @@ fun WeatherWeekForecastRow(day: DailyForecast, weekMin: Int, weekMax: Int) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 40.dp, end = 16.dp, bottom = 12.dp)
-                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(
+                        start = if (isTablet) 50.dp else 40.dp,
+                        end = if (isTablet) 20.dp else 16.dp,
+                        bottom = if (isTablet) 16.dp else 12.dp
+                    )
+                    .background(
+                        Color.White.copy(alpha = 0.05f),
+                        RoundedCornerShape(if (isTablet) 12.dp else 8.dp)
+                    )
+                    .padding(if (isTablet) 16.dp else 12.dp),
+                verticalArrangement = Arrangement.spacedBy(if (isTablet) 16.dp else 12.dp)
             ) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     DetailInfoItem(Icons.Default.Air, "Wind / Böen", "${day.maxWind} / ${day.maxGust} kn")
@@ -830,21 +1100,37 @@ fun WeatherWeekForecastRow(day: DailyForecast, weekMin: Int, weekMax: Int) {
 
 @Composable
 private fun DetailInfoItem(icon: ImageVector, label: String, value: String) {
+    val isTablet = currentAdaptiveLayout().isTablet
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
-        Spacer(modifier = Modifier.width(4.dp))
+        Icon(
+            icon,
+            null,
+            tint = Color.White.copy(alpha = 0.6f),
+            modifier = Modifier.size(if (isTablet) 18.dp else 14.dp)
+        )
+        Spacer(modifier = Modifier.width(if (isTablet) 6.dp else 4.dp))
         Column {
-            Text(label, color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
-            Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text(
+                label,
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = if (isTablet) 12.sp else 10.sp
+            )
+            Text(
+                value,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = if (isTablet) 15.sp else 12.sp
+            )
         }
     }
 }
 
 @Composable
 fun WindDetailRow(label: String, value: String) {
+    val isTablet = currentAdaptiveLayout().isTablet
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
-        Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Text(label, color = Color.White.copy(alpha = 0.7f), fontSize = if (isTablet) 17.sp else 14.sp)
+        Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (isTablet) 17.sp else 14.sp)
     }
 }
 
@@ -855,6 +1141,7 @@ fun TideContent(
     loading: Boolean = false,
     onStationClick: () -> Unit = {}
 ) {
+    val isTablet = currentAdaptiveLayout().isTablet
     val now = LocalDateTime.now()
 
     val eventsWithTime = remember(events) { TideTimes.sortedByTime(events) }
@@ -876,7 +1163,7 @@ fun TideContent(
     // Hero Tide Card (Screenshot 3 style)
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(if (isTablet) TabletLayoutTokens.CardPadding else 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -890,28 +1177,33 @@ fun TideContent(
                 ) {
                     Text(
                         station?.gaugeLabel ?: station?.area ?: "Unbekannt",
-                        fontSize = 24.sp,
+                        fontSize = if (isTablet) 29.sp else 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.semantics { heading() }
                     )
-                    Icon(Icons.Default.KeyboardArrowDown, "Station wählen", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        "Station wählen",
+                        tint = Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier.size(if (isTablet) 25.dp else 20.dp)
+                    )
                 }
                 Text(
                     "BSH ${station?.gaugeLabel?.take(4) ?: "PEGEL"}",
-                    fontSize = 12.sp,
+                    fontSize = if (isTablet) 15.sp else 12.sp,
                     color = Color.White.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(if (isTablet) 20.dp else 16.dp))
 
             // Tide Arrow Icon
             Box(
                 modifier = Modifier
-                    .size(48.dp) // Increased touch/focal area
+                    .size(if (isTablet) 60.dp else 48.dp) // Increased touch/focal area
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
@@ -920,11 +1212,11 @@ fun TideContent(
                     if (isRising) Icons.Default.ArrowOutward else Icons.Default.SouthEast,
                     contentDescription = if (isRising) "Steigendes Wasser" else "Fallendes Wasser",
                     tint = Color.White,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(if (isTablet) 34.dp else 28.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(if (isTablet) 20.dp else 16.dp))
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -932,19 +1224,35 @@ fun TideContent(
                     contentDescription = "$statusText. $nextEventLabel um ${nextEventPair?.second?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "--:--"}. $countdownText"
                 }
             ) {
-                Text(statusText, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
-                Text(nextEventLabel, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, textAlign = TextAlign.Center)
+                Text(
+                    statusText,
+                    color = Color.White,
+                    fontSize = if (isTablet) 22.sp else 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    nextEventLabel,
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = if (isTablet) 16.sp else 13.sp,
+                    textAlign = TextAlign.Center
+                )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(if (isTablet) 10.dp else 8.dp))
 
                 Text(
                     nextEventPair?.second?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: "--:--",
                     color = Color.White,
-                    fontSize = 36.sp,
+                    fontSize = if (isTablet) 44.sp else 36.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
-                Text(countdownText, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, textAlign = TextAlign.Center)
+                Text(
+                    countdownText,
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = if (isTablet) 16.sp else 13.sp,
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }
@@ -967,22 +1275,33 @@ fun TideContent(
 
     // Astronomische Gezeiten (Horizontal Cards)
     GlassCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(if (isTablet) TabletLayoutTokens.CardPadding else 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.History, "Uhrzeit", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    Icons.Default.History,
+                    "Uhrzeit",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(if (isTablet) 18.dp else 14.dp)
+                )
+                Spacer(modifier = Modifier.width(if (isTablet) 8.dp else 6.dp))
                 Text(
                     "ASTRONOMISCHE GEZEITEN",
-                    fontSize = 10.sp,
+                    fontSize = if (isTablet) 12.sp else 10.sp,
                     color = Color.White.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.semantics { heading() }
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(if (isTablet) 16.dp else 12.dp))
             LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.semantics { contentDescription = "Liste der nächsten Gezeitenereignisse" }
+                horizontalArrangement = if (isTablet) {
+                    Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
+                } else {
+                    Arrangement.spacedBy(12.dp)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "Liste der nächsten Gezeitenereignisse" }
             ) {
                 val upcoming = eventsWithTime.filter { it.second.isAfter(now.minusHours(2)) }.take(4)
                 items(upcoming) { (ev, dt) ->
@@ -999,58 +1318,88 @@ fun TideContent(
 
     // Gezeitengrundwerte
     GlassCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(if (isTablet) TabletLayoutTokens.CardPadding else 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Straighten, "Maßstab", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    Icons.Default.Straighten,
+                    "Maßstab",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(if (isTablet) 18.dp else 14.dp)
+                )
+                Spacer(modifier = Modifier.width(if (isTablet) 8.dp else 6.dp))
                 Text(
                     "GEZEITENGRUNDWERTE",
-                    fontSize = 10.sp,
+                    fontSize = if (isTablet) 12.sp else 10.sp,
                     color = Color.White.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.semantics { heading() }
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TideBasisTile("MHW", station?.meanHighWater?.let { "%.2f m".format(it) } ?: "-- m")
-                TideBasisTile("MNW", station?.meanLowWater?.let { "%.2f m".format(it) } ?: "-- m")
-                val mth = if (station?.meanHighWater != null && station.meanLowWater != null) {
-                    "%.2f m".format(station.meanHighWater - station.meanLowWater)
-                } else "-- m"
-                TideBasisTile("MTH", mth)
+            Spacer(modifier = Modifier.height(if (isTablet) 20.dp else 16.dp))
+            if (isTablet) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Row(
+                        modifier = Modifier
+                            .widthIn(max = TabletLayoutTokens.CompactContentMaxWidth)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        TideBasisTile("MHW", station?.meanHighWater?.let { "%.2f m".format(it) } ?: "-- m")
+                        TideBasisTile("MNW", station?.meanLowWater?.let { "%.2f m".format(it) } ?: "-- m")
+                        val mth = if (station?.meanHighWater != null && station.meanLowWater != null) {
+                            "%.2f m".format(station.meanHighWater - station.meanLowWater)
+                        } else {
+                            "-- m"
+                        }
+                        TideBasisTile("MTH", mth)
+                    }
+                }
+            } else {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    TideBasisTile("MHW", station?.meanHighWater?.let { "%.2f m".format(it) } ?: "-- m")
+                    TideBasisTile("MNW", station?.meanLowWater?.let { "%.2f m".format(it) } ?: "-- m")
+                    val mth = if (station?.meanHighWater != null && station.meanLowWater != null) {
+                        "%.2f m".format(station.meanHighWater - station.meanLowWater)
+                    } else "-- m"
+                    TideBasisTile("MTH", mth)
+                }
             }
         }
     }
 
     // Wasserstandsvorhersage Graph
     GlassCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(if (isTablet) TabletLayoutTokens.CardPadding else 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.SsidChart, "Graph", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    Icons.Default.SsidChart,
+                    "Graph",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(if (isTablet) 18.dp else 14.dp)
+                )
+                Spacer(modifier = Modifier.width(if (isTablet) 8.dp else 6.dp))
                 Text(
                     "WASSERSTANDSVORHERSAGE",
-                    fontSize = 10.sp,
+                    fontSize = if (isTablet) 12.sp else 10.sp,
                     color = Color.White.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.semantics { heading() }
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(if (isTablet) 24.dp else 20.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
-                    .padding(horizontal = 4.dp)
+                    .height(if (isTablet) 272.dp else 220.dp)
+                    .padding(horizontal = if (isTablet) 6.dp else 4.dp)
                     .semantics { contentDescription = "Grafische Darstellung der Wasserstandsvorhersage." }
             ) {
                 if (windowEvents.size < 2) {
                     Text(
                         if (loading) "Lade Daten..." else "Keine Daten verfügbar",
                         color = Color.White.copy(alpha = 0.3f),
-                        fontSize = 12.sp,
+                        fontSize = if (isTablet) 15.sp else 12.sp,
                         modifier = Modifier.align(Alignment.Center)
                     )
                 } else {
@@ -1077,21 +1426,22 @@ private fun TideCurveCanvas(
     mhw: Double? = null,
     mnw: Double? = null
 ) {
+    val isTablet = currentAdaptiveLayout().isTablet
     val futureColor = Color(0xFF4FC3F7)
     val pastColor = Color.White
     val gridColor = Color.White.copy(alpha = 0.1f)
     val nowColor = Color(0xFFFFA726)
     val density = androidx.compose.ui.platform.LocalDensity.current
-    val labelTextSize = with(density) { 9.sp.toPx() }
-    val dateTextSize = with(density) { 10.sp.toPx() }
+    val labelTextSize = with(density) { (if (isTablet) 11.sp else 9.sp).toPx() }
+    val dateTextSize = with(density) { (if (isTablet) 12.sp else 10.sp).toPx() }
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         val width = size.width
         val height = size.height
-        val paddingLeft = 35.dp.toPx()
-        val paddingRight = 35.dp.toPx()
-        val paddingTop = 20.dp.toPx()
-        val paddingBottom = 55.dp.toPx()
+        val paddingLeft = (if (isTablet) 42.dp else 35.dp).toPx()
+        val paddingRight = (if (isTablet) 42.dp else 35.dp).toPx()
+        val paddingTop = (if (isTablet) 24.dp else 20.dp).toPx()
+        val paddingBottom = (if (isTablet) 66.dp else 55.dp).toPx()
 
         val drawWidth = width - paddingLeft - paddingRight
         val drawHeight = height - paddingTop - paddingBottom
@@ -1142,7 +1492,12 @@ private fun TideCurveCanvas(
             if (step in yMin..yMax) {
                 val y = yForLevel(step)
                 drawLine(gridColor, Offset(paddingLeft, y), Offset(width - paddingRight, y))
-                drawContext.canvas.nativeCanvas.drawText("%.0f m".format(step), paddingLeft - 5.dp.toPx(), y + labelTextSize/3, axisPaint.apply { textAlign = android.graphics.Paint.Align.RIGHT })
+                drawContext.canvas.nativeCanvas.drawText(
+                    "%.0f m".format(step),
+                    paddingLeft - (if (isTablet) 6.dp else 5.dp).toPx(),
+                    y + labelTextSize / 3,
+                    axisPaint.apply { textAlign = android.graphics.Paint.Align.RIGHT }
+                )
             }
         }
 
@@ -1150,14 +1505,37 @@ private fun TideCurveCanvas(
         mhw?.let {
             val y = yForLevel(it)
             drawLine(Color.White.copy(alpha = 0.3f), Offset(paddingLeft, y), Offset(width - paddingRight, y), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f)))
-            drawContext.canvas.nativeCanvas.drawText("MHW", 2.dp.toPx(), y - 4.dp.toPx(), axisPaint.apply { alpha = 180; textAlign = android.graphics.Paint.Align.LEFT })
-            drawContext.canvas.nativeCanvas.drawText("%.2f m".format(it), width - 2.dp.toPx(), y - 4.dp.toPx(), axisPaint.apply { textAlign = android.graphics.Paint.Align.RIGHT })
+            drawContext.canvas.nativeCanvas.drawText(
+                "MHW",
+                (if (isTablet) 3.dp else 2.dp).toPx(),
+                y - (if (isTablet) 5.dp else 4.dp).toPx(),
+                axisPaint.apply {
+                    alpha = 180
+                    textAlign = android.graphics.Paint.Align.LEFT
+                }
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                "%.2f m".format(it),
+                width - (if (isTablet) 3.dp else 2.dp).toPx(),
+                y - (if (isTablet) 5.dp else 4.dp).toPx(),
+                axisPaint.apply { textAlign = android.graphics.Paint.Align.RIGHT }
+            )
         }
         mnw?.let {
             val y = yForLevel(it)
             drawLine(Color.White.copy(alpha = 0.3f), Offset(paddingLeft, y), Offset(width - paddingRight, y), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f)))
-            drawContext.canvas.nativeCanvas.drawText("MNW", 2.dp.toPx(), y + labelTextSize + 2.dp.toPx(), axisPaint.apply { textAlign = android.graphics.Paint.Align.LEFT })
-            drawContext.canvas.nativeCanvas.drawText("%.2f m".format(it), width - 2.dp.toPx(), y + labelTextSize + 2.dp.toPx(), axisPaint.apply { textAlign = android.graphics.Paint.Align.RIGHT })
+            drawContext.canvas.nativeCanvas.drawText(
+                "MNW",
+                (if (isTablet) 3.dp else 2.dp).toPx(),
+                y + labelTextSize + (if (isTablet) 3.dp else 2.dp).toPx(),
+                axisPaint.apply { textAlign = android.graphics.Paint.Align.LEFT }
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                "%.2f m".format(it),
+                width - (if (isTablet) 3.dp else 2.dp).toPx(),
+                y + labelTextSize + (if (isTablet) 3.dp else 2.dp).toPx(),
+                axisPaint.apply { textAlign = android.graphics.Paint.Align.RIGHT }
+            )
         }
 
         // X-Axis (Time & Date)
@@ -1185,17 +1563,32 @@ private fun TideCurveCanvas(
 
             if (tick.hour % 4 == 0) {
                 drawLine(gridColor, Offset(x, paddingTop), Offset(x, plotBottomY))
-                drawContext.canvas.nativeCanvas.drawText(tick.format(DateTimeFormatter.ofPattern("HH")), x, plotBottomY + 16.dp.toPx(), hourPaint)
+                drawContext.canvas.nativeCanvas.drawText(
+                    tick.format(DateTimeFormatter.ofPattern("HH")),
+                    x,
+                    plotBottomY + (if (isTablet) 20.dp else 16.dp).toPx(),
+                    hourPaint
+                )
 
                 if (lastDate == null || tick.toLocalDate() != lastDate) {
-                    drawContext.canvas.nativeCanvas.drawText(tick.format(DateTimeFormatter.ofPattern("dd.MM.")), x, plotBottomY + 34.dp.toPx(), datePaint)
+                    drawContext.canvas.nativeCanvas.drawText(
+                        tick.format(DateTimeFormatter.ofPattern("dd.MM.")),
+                        x,
+                        plotBottomY + (if (isTablet) 42.dp else 34.dp).toPx(),
+                        datePaint
+                    )
                     lastDate = tick.toLocalDate()
                 }
             }
             tick = tick.plusHours(1)
         }
 
-        drawContext.canvas.nativeCanvas.drawText("Gesetzliche Zeit", width/2, height - 5.dp.toPx(), hourPaint.apply { alpha = 80 })
+        drawContext.canvas.nativeCanvas.drawText(
+            "Gesetzliche Zeit",
+            width / 2,
+            height - (if (isTablet) 6.dp else 5.dp).toPx(),
+            hourPaint.apply { alpha = 80 }
+        )
 
         // The Curve
         val nowMinutes = java.time.Duration.between(windowStart, now).toMinutes().toDouble()
@@ -1247,16 +1640,28 @@ private fun TideCurveCanvas(
             futurePath.lineTo(paddingLeft + drawWidth, yForLevel(getLevelAt(windowMinutes)))
         }
 
-        drawPath(pastPath, pastColor, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
-        drawPath(futurePath, futureColor, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
+        drawPath(
+            pastPath,
+            pastColor,
+            style = Stroke(width = (if (isTablet) 3.5.dp else 3.dp).toPx(), cap = StrokeCap.Round)
+        )
+        drawPath(
+            futurePath,
+            futureColor,
+            style = Stroke(width = (if (isTablet) 3.5.dp else 3.dp).toPx(), cap = StrokeCap.Round)
+        )
 
         // Points
         for ((minutes, level, type) in pts) {
             if (minutes < 0 || minutes > windowMinutes) continue
             val cx = xForMinute(minutes)
             val cy = yForLevel(level)
-            drawCircle(if (minutes <= nowMinutes) pastColor else futureColor, 4.dp.toPx(), Offset(cx, cy))
-            drawCircle(Color(0xFF1B4E7A), 2.dp.toPx(), Offset(cx, cy))
+            drawCircle(
+                if (minutes <= nowMinutes) pastColor else futureColor,
+                (if (isTablet) 5.dp else 4.dp).toPx(),
+                Offset(cx, cy)
+            )
+            drawCircle(Color(0xFF1B4E7A), (if (isTablet) 2.5.dp else 2.dp).toPx(), Offset(cx, cy))
         }
 
         // Now line
@@ -1269,26 +1674,31 @@ private fun TideCurveCanvas(
 
 @Composable
 fun TideBasisTile(label: String, value: String) {
+    val isTablet = currentAdaptiveLayout().isTablet
     Column {
-        Text(label, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
-        Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Text(label, color = Color.White.copy(alpha = 0.6f), fontSize = if (isTablet) 15.sp else 12.sp)
+        Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (isTablet) 24.sp else 20.sp)
     }
 }
 
 @Composable
 fun TideEventTile(type: String, time: String, height: String, diff: String) {
+    val isTablet = currentAdaptiveLayout().isTablet
     Surface(
         modifier = Modifier
-            .width(130.dp)
-            .height(110.dp),
-        shape = RoundedCornerShape(16.dp),
+            .width(if (isTablet) 160.dp else 130.dp)
+            .height(if (isTablet) 152.dp else 110.dp),
+        shape = RoundedCornerShape(if (isTablet) 20.dp else 16.dp),
         color = Color.White.copy(alpha = 0.08f),
         border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f))
     ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.Center) {
+        Column(
+            modifier = Modifier.padding(if (isTablet) 16.dp else 12.dp),
+            verticalArrangement = Arrangement.Center
+        ) {
             Box(
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(if (isTablet) 30.dp else 24.dp)
                     .clip(CircleShape)
                     .background(if (type == "HW") Color(0xFF4FC3F7).copy(alpha = 0.15f) else Color(0xFF9575CD).copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
@@ -1297,19 +1707,20 @@ fun TideEventTile(type: String, time: String, height: String, diff: String) {
                     if (type == "HW") Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
                     null,
                     tint = if (type == "HW") Color(0xFF4FC3F7) else Color(0xFF9575CD),
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(if (isTablet) 17.dp else 14.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(time, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            Text(height, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
-            Text(diff, color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp)
+            Spacer(modifier = Modifier.height(if (isTablet) 10.dp else 8.dp))
+            Text(time, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (isTablet) 24.sp else 20.sp)
+            Text(height, color = Color.White.copy(alpha = 0.8f), fontSize = if (isTablet) 15.sp else 12.sp)
+            Text(diff, color = Color.White.copy(alpha = 0.5f), fontSize = if (isTablet) 12.sp else 10.sp)
         }
     }
 }
 
 @Composable
 fun WeatherSkeleton() {
+    val isTablet = currentAdaptiveLayout().isTablet
     val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.4f,
@@ -1323,14 +1734,20 @@ fun WeatherSkeleton() {
 
     Column(
         modifier = Modifier.fillMaxWidth().alpha(alpha),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(
+            if (isTablet) TabletLayoutTokens.SectionSpacing else 16.dp
+        )
     ) {
         // Hero Card Skeleton
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .height(if (isTablet) 272.dp else 220.dp)
+                .clip(
+                    RoundedCornerShape(
+                        if (isTablet) TabletLayoutTokens.CardCornerRadius else 20.dp
+                    )
+                )
                 .background(Color.White.copy(alpha = 0.12f))
         )
 
@@ -1338,8 +1755,12 @@ fun WeatherSkeleton() {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(130.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .height(if (isTablet) 160.dp else 130.dp)
+                .clip(
+                    RoundedCornerShape(
+                        if (isTablet) TabletLayoutTokens.CardCornerRadius else 20.dp
+                    )
+                )
                 .background(Color.White.copy(alpha = 0.12f))
         )
 
@@ -1347,8 +1768,12 @@ fun WeatherSkeleton() {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(300.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .height(if (isTablet) 372.dp else 300.dp)
+                .clip(
+                    RoundedCornerShape(
+                        if (isTablet) TabletLayoutTokens.CardCornerRadius else 20.dp
+                    )
+                )
                 .background(Color.White.copy(alpha = 0.12f))
         )
     }
@@ -1356,11 +1781,26 @@ fun WeatherSkeleton() {
 
 @Composable
 fun GlassCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val isTablet = currentAdaptiveLayout().isTablet
+    val shape = RoundedCornerShape(if (isTablet) TabletLayoutTokens.CardCornerRadius else 20.dp)
+    val cardModifier = if (isTablet) {
+        modifier.shadow(
+            elevation = 2.dp,
+            shape = shape,
+            clip = false,
+            ambientColor = Color.Black.copy(alpha = 0.06f),
+            spotColor = Color.Black.copy(alpha = 0.08f)
+        )
+    } else {
+        modifier
+    }
+
     Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
+        modifier = cardModifier,
+        shape = shape,
         color = Color.White.copy(alpha = 0.12f),
-        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f))
+        border = BorderStroke(if (isTablet) 1.dp else 0.5.dp, Color.White.copy(alpha = 0.2f)),
+        shadowElevation = 0.dp
     ) {
         content()
     }
@@ -1373,43 +1813,92 @@ fun StationSelectionDialog(
     onDismiss: () -> Unit,
     onStationSelected: (TideStationData) -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    val adaptiveLayout = currentAdaptiveLayout()
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = !adaptiveLayout.isTablet)
+    ) {
         GlassCard(
             modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .heightIn(max = 420.dp)
+                .then(
+                    if (adaptiveLayout.isTablet) {
+                        Modifier
+                            .widthIn(max = adaptiveLayout.overlayMaxWidth)
+                            .fillMaxWidth(0.92f)
+                            .heightIn(max = 520.dp)
+                    } else {
+                        Modifier
+                            .fillMaxWidth(0.92f)
+                            .heightIn(max = 420.dp)
+                    }
+                )
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(
+                modifier = Modifier.padding(
+                    if (adaptiveLayout.isTablet) TabletLayoutTokens.CardPadding else 16.dp
+                )
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text("Standort auswählen", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text("Ostfriesische Inseln", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                        Text(
+                            "Standort auswählen",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = if (adaptiveLayout.isTablet) 22.sp else 18.sp
+                        )
+                        Text(
+                            "Ostfriesische Inseln",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = if (adaptiveLayout.isTablet) 15.sp else 12.sp
+                        )
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, null, tint = Color.White)
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = if (adaptiveLayout.isTablet) Modifier.size(48.dp) else Modifier
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            null,
+                            tint = Color.White,
+                            modifier = if (adaptiveLayout.isTablet) {
+                                Modifier.size(TabletLayoutTokens.StandardIconSize)
+                            } else {
+                                Modifier
+                            }
+                        )
                     }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(if (adaptiveLayout.isTablet) 16.dp else 12.dp))
                 val sortedStations = remember(stations) {
                     stations.sortedBy { it.gaugeLabel ?: it.area }
                 }
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(if (adaptiveLayout.isTablet) 6.dp else 4.dp)
                 ) {
                     items(sortedStations) { station ->
                         val isSelected = station == selectedStation
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
+                                .then(
+                                    if (adaptiveLayout.isTablet) {
+                                        Modifier.heightIn(min = 52.dp)
+                                    } else {
+                                        Modifier
+                                    }
+                                )
+                                .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 14.dp else 10.dp))
                                 .background(if (isSelected) Color.White.copy(alpha = 0.2f) else Color.Transparent)
                                 .clickable { onStationSelected(station) }
-                                .padding(vertical = 10.dp, horizontal = 10.dp),
+                                .padding(
+                                    vertical = if (adaptiveLayout.isTablet) 12.dp else 10.dp,
+                                    horizontal = if (adaptiveLayout.isTablet) 14.dp else 10.dp
+                                ),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -1417,16 +1906,22 @@ fun StationSelectionDialog(
                                 if (isSelected) {
                                     Box(
                                         modifier = Modifier
-                                            .size(4.dp, 16.dp)
-                                            .background(Color(0xFF4FC3F7), RoundedCornerShape(2.dp))
+                                            .size(
+                                                width = if (adaptiveLayout.isTablet) 5.dp else 4.dp,
+                                                height = if (adaptiveLayout.isTablet) 20.dp else 16.dp
+                                            )
+                                            .background(
+                                                Color(0xFF4FC3F7),
+                                                RoundedCornerShape(if (adaptiveLayout.isTablet) 3.dp else 2.dp)
+                                            )
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Spacer(modifier = Modifier.width(if (adaptiveLayout.isTablet) 10.dp else 8.dp))
                                 }
                                 Text(
                                     text = station.gaugeLabel ?: station.area,
                                     color = Color.White,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 15.sp
+                                    fontSize = if (adaptiveLayout.isTablet) 18.sp else 15.sp
                                 )
                             }
                             val temp = station.temperature?.toInt() ?: 17
@@ -1434,7 +1929,7 @@ fun StationSelectionDialog(
                                 text = "$temp°",
                                 color = if (isSelected) Color(0xFF4FC3F7) else Color.White.copy(alpha = 0.8f),
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 15.sp
+                                fontSize = if (adaptiveLayout.isTablet) 18.sp else 15.sp
                             )
                         }
                     }

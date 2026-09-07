@@ -1,6 +1,5 @@
 package com.example.trnberechnung.ui
 
-import android.content.res.Configuration
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -37,7 +36,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -118,36 +116,52 @@ fun CrewspaceScreen(
     bottomOverlayClearance: Dp = 0.dp
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val adaptiveLayout = currentAdaptiveLayout()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .testTag("screen_crewspace")
             .background(CrewspaceBg)
-            .padding(bottom = bottomOverlayClearance)
+            .padding(bottom = bottomOverlayClearance),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(modifier = Modifier.height(topOverlayClearance + 4.dp))
         // ── Header ──
-        CrewspaceHeader()
+        CrewspaceHeader(adaptiveLayout)
 
         // ── Segmented Tab Row ──
         CrewspaceSegmentedTabs(
             selectedTab = uiState.selectedTab,
-            onTabSelected = { viewModel.selectTab(it) }
+            onTabSelected = { viewModel.selectTab(it) },
+            adaptiveLayout = adaptiveLayout,
         )
 
         // ── Tab-Content ──
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .weight(1f)
+                .weight(1f),
+            contentAlignment = Alignment.TopCenter,
         ) {
-            when (uiState.selectedTab) {
-                CrewspaceTab.PLANUNG -> {
-                    PlanungTabContent(uiState = uiState, viewModel = viewModel)
-                }
-                CrewspaceTab.CREW -> {
-                    CrewTabContent(uiState = uiState, viewModel = viewModel)
+            Box(
+                modifier =
+                    if (adaptiveLayout.isTablet) {
+                        Modifier
+                            .fillMaxHeight()
+                            .widthIn(max = adaptiveLayout.mainContentMaxWidth)
+                            .fillMaxWidth()
+                    } else {
+                        Modifier.fillMaxSize()
+                    },
+            ) {
+                when (uiState.selectedTab) {
+                    CrewspaceTab.PLANUNG -> {
+                        PlanungTabContent(uiState = uiState, viewModel = viewModel)
+                    }
+                    CrewspaceTab.CREW -> {
+                        CrewTabContent(uiState = uiState, viewModel = viewModel)
+                    }
                 }
             }
         }
@@ -220,6 +234,7 @@ private fun EditCrewMemberDialog(
     onDismiss: () -> Unit,
     onSave: (CrewMember) -> Unit
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
     var name by remember { mutableStateOf(member.name) }
     var emergencyContact by remember { mutableStateOf(member.emergencyContact) }
     var phone by remember { mutableStateOf(member.phone) }
@@ -236,17 +251,32 @@ private fun EditCrewMemberDialog(
             ) {
                 CrewspaceTextField(value = name, onValueChange = { name = it }, placeholder = "Name")
 
-                Text("Rolle", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = CrewspaceTextSecondary)
+                Text(
+                    "Rolle",
+                    fontSize = if (adaptiveLayout.isTablet) 15.sp else 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = CrewspaceTextSecondary,
+                )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf(CrewRole.SKIPPER, CrewRole.CO_SKIPPER, CrewRole.NAVIGATION).forEach { r ->
                         val isSelected = role == r
                         Surface(
-                            modifier = Modifier.weight(1f).clickable { role = r },
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .then(if (adaptiveLayout.isTablet) Modifier.heightIn(min = 48.dp) else Modifier)
+                                    .clickable { role = r },
                             color = if (isSelected) CrewspaceAccent else CrewspaceCardBg,
                             shape = RoundedCornerShape(8.dp),
                             border = if (!isSelected) BorderStroke(1.dp, CrewspaceDivider) else null
                         ) {
-                            Text(r.label, modifier = Modifier.padding(vertical = 8.dp), textAlign = TextAlign.Center, fontSize = 11.sp, color = if(isSelected) Color.White else CrewspaceTextPrimary)
+                            Text(
+                                r.label,
+                                modifier = Modifier.padding(vertical = if (adaptiveLayout.isTablet) 12.dp else 8.dp),
+                                textAlign = TextAlign.Center,
+                                fontSize = if (adaptiveLayout.isTablet) 14.sp else 11.sp,
+                                color = if (isSelected) Color.White else CrewspaceTextPrimary,
+                            )
                         }
                     }
                 }
@@ -281,24 +311,32 @@ private fun EditCrewMemberDialog(
 // ══════════════════════════════════════════════════════════════
 
 @Composable
-private fun CrewspaceHeader() {
-    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+private fun CrewspaceHeader(adaptiveLayout: AdaptiveLayout) {
+    val isLandscape = adaptiveLayout.isLandscape
+    val widthModifier =
+        if (adaptiveLayout.isTablet) {
+            Modifier.widthIn(max = adaptiveLayout.mainContentMaxWidth).fillMaxWidth()
+        } else {
+            Modifier.fillMaxWidth()
+        }
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = if (isLandscape) 2.dp else 12.dp)
+        modifier =
+            widthModifier.padding(
+                horizontal = if (adaptiveLayout.isTablet) adaptiveLayout.horizontalScreenPadding else 20.dp,
+                vertical = if (adaptiveLayout.isTablet) 10.dp else if (isLandscape) 2.dp else 12.dp,
+            ),
     ) {
         Text(
             text = "Crewspace",
-            fontSize = if (isLandscape) 20.sp else 32.sp,
+            fontSize = if (adaptiveLayout.isTablet) 36.sp else if (isLandscape) 20.sp else 32.sp,
             fontWeight = FontWeight.ExtraBold,
             color = CrewspacePrimary,
             letterSpacing = (-0.5).sp
         )
-        if (!isLandscape) {
+        if (adaptiveLayout.isTablet || !isLandscape) {
             Text(
                 text = "Crew und Termine",
-                fontSize = 14.sp,
+                fontSize = if (adaptiveLayout.isTablet) 17.sp else 14.sp,
                 color = CrewspaceTextSecondary,
                 fontWeight = FontWeight.Medium
             )
@@ -324,15 +362,24 @@ private val tabItems = listOf(
 @Composable
 private fun CrewspaceSegmentedTabs(
     selectedTab: CrewspaceTab,
-    onTabSelected: (CrewspaceTab) -> Unit
+    onTabSelected: (CrewspaceTab) -> Unit,
+    adaptiveLayout: AdaptiveLayout,
 ) {
-    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isLandscape = adaptiveLayout.isLandscape
+    val widthModifier =
+        if (adaptiveLayout.isTablet) {
+            Modifier.widthIn(max = adaptiveLayout.mainContentMaxWidth).fillMaxWidth()
+        } else {
+            Modifier.fillMaxWidth()
+        }
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = if (isLandscape) 2.dp else 8.dp),
+        modifier =
+            widthModifier.padding(
+                horizontal = if (adaptiveLayout.isTablet) adaptiveLayout.horizontalScreenPadding else 20.dp,
+                vertical = if (adaptiveLayout.isTablet) 8.dp else if (isLandscape) 2.dp else 8.dp,
+            ),
         color = CrewspaceTabBg,
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp),
     ) {
         Row(
             modifier = Modifier.padding(4.dp),
@@ -344,8 +391,8 @@ private fun CrewspaceSegmentedTabs(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .height(if (adaptiveLayout.isTablet) 56.dp else 40.dp)
+                        .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 16.dp else 12.dp))
                         .background(
                             if (isSelected) CrewspaceTabActive else Color.Transparent
                         )
@@ -360,12 +407,12 @@ private fun CrewspaceSegmentedTabs(
                             item.icon,
                             contentDescription = item.label,
                             tint = if (isSelected) CrewspaceTabActiveText else CrewspaceTabInactiveText,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(if (adaptiveLayout.isTablet) 24.dp else 18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = item.label,
-                            fontSize = 14.sp,
+                            fontSize = if (adaptiveLayout.isTablet) 17.sp else 14.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             color = if (isSelected) CrewspaceTabActiveText else CrewspaceTabInactiveText
                         )
@@ -423,15 +470,22 @@ private fun CrewspaceSearchBar(
 private fun PlanungTabContent(uiState: CrewspaceUiState, viewModel: CrewspaceViewModel) {
     val scrollState = rememberScrollState()
     val eventsForDay = viewModel.eventsForSelectedDate()
+    val adaptiveLayout = currentAdaptiveLayout()
 
     var eventToEdit by remember { mutableStateOf<PlannerEvent?>(null) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(
+                    horizontal = if (adaptiveLayout.isTablet) adaptiveLayout.horizontalScreenPadding else 16.dp,
+                    vertical = if (adaptiveLayout.isTablet) 12.dp else 8.dp,
+                ),
+        verticalArrangement =
+            Arrangement.spacedBy(if (adaptiveLayout.isTablet) TabletLayoutTokens.SectionSpacing else 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // ── Kalender-Card ──
         CalendarCard(uiState = uiState, viewModel = viewModel)
@@ -518,6 +572,7 @@ private fun PlanungTabContent(uiState: CrewspaceUiState, viewModel: CrewspaceVie
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CalendarCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewModel) {
+    val adaptiveLayout = currentAdaptiveLayout()
     val yearMonth = YearMonth.from(uiState.currentMonth)
     val germanLocale = Locale.GERMAN
     val monthName = yearMonth.month.getDisplayName(TextStyle.FULL, germanLocale)
@@ -525,12 +580,22 @@ private fun CalendarCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewMode
     val year = yearMonth.year
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            if (adaptiveLayout.isTablet) {
+                Modifier
+                    .widthIn(max = if (adaptiveLayout.isLargeTablet) 720.dp else 640.dp)
+                    .fillMaxWidth()
+            } else {
+                Modifier.fillMaxWidth()
+            },
         color = CrewspaceSurface,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) TabletLayoutTokens.CardCornerRadius else 24.dp),
         shadowElevation = 4.dp
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(
+            modifier =
+                Modifier.padding(if (adaptiveLayout.isTablet) TabletLayoutTokens.CardPadding else 20.dp),
+        ) {
             // ── Monat-Navigation ──
             var showMonthYearPicker by remember { mutableStateOf(false) }
 
@@ -541,7 +606,10 @@ private fun CalendarCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewMode
             ) {
                 IconButton(
                     onClick = { viewModel.navigateMonth(false) },
-                    modifier = Modifier.size(40.dp).background(CrewspaceCardBg, CircleShape)
+                    modifier =
+                        Modifier
+                            .size(if (adaptiveLayout.isTablet) 52.dp else 40.dp)
+                            .background(CrewspaceCardBg, CircleShape),
                 ) {
                     Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = CrewspaceAccent)
                 }
@@ -557,7 +625,7 @@ private fun CalendarCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewMode
                     ) {
                         Text(
                             text = "$monthName $year",
-                            fontSize = 20.sp,
+                            fontSize = if (adaptiveLayout.isTablet) 24.sp else 20.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = CrewspaceTextPrimary
                         )
@@ -566,14 +634,17 @@ private fun CalendarCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewMode
                             Icons.Default.ArrowDropDown,
                             contentDescription = null,
                             tint = CrewspaceTextSecondary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(if (adaptiveLayout.isTablet) 24.dp else 20.dp)
                         )
                     }
                 }
 
                 IconButton(
                     onClick = { viewModel.navigateMonth(true) },
-                    modifier = Modifier.size(40.dp).background(CrewspaceCardBg, CircleShape)
+                    modifier =
+                        Modifier
+                            .size(if (adaptiveLayout.isTablet) 52.dp else 40.dp)
+                            .background(CrewspaceCardBg, CircleShape),
                 ) {
                     Icon(Icons.Default.ChevronRight, contentDescription = null, tint = CrewspaceAccent)
                 }
@@ -634,7 +705,7 @@ private fun CalendarCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewMode
                     ) {
                         Text(
                             text = day,
-                            fontSize = 13.sp,
+                            fontSize = if (adaptiveLayout.isTablet) 15.sp else 13.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = CrewspaceTextSecondary.copy(alpha = 0.8f),
                             textAlign = TextAlign.Center
@@ -675,7 +746,7 @@ private fun CalendarCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewMode
 
                                 Box(
                                     modifier = Modifier
-                                        .size(40.dp)
+                                        .size(if (adaptiveLayout.isTablet) 48.dp else 40.dp)
                                         .clip(CircleShape)
                                         .background(
                                             when {
@@ -693,7 +764,7 @@ private fun CalendarCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewMode
                                     ) {
                                         Text(
                                             text = "$dayNumber",
-                                            fontSize = 15.sp,
+                                            fontSize = if (adaptiveLayout.isTablet) 17.sp else 15.sp,
                                             fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Medium,
                                             color = when {
                                                 isSelected -> Color.White
@@ -731,6 +802,7 @@ private fun DayDetailCard(
     onDeleteEvent: (PlannerEvent) -> Unit,
     onEventClick: (PlannerEvent) -> Unit
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
     val germanLocale = Locale.GERMAN
     val dayOfWeek = selectedDate.dayOfWeek
         .getDisplayName(TextStyle.FULL, germanLocale)
@@ -741,12 +813,20 @@ private fun DayDetailCard(
         .replaceFirstChar { it.titlecase(germanLocale) }
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            if (adaptiveLayout.isTablet) {
+                Modifier.widthIn(max = adaptiveLayout.compactContentMaxWidth).fillMaxWidth()
+            } else {
+                Modifier.fillMaxWidth()
+            },
         color = CrewspaceSurface,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) TabletLayoutTokens.CardCornerRadius else 24.dp),
         shadowElevation = 2.dp
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(
+            modifier =
+                Modifier.padding(if (adaptiveLayout.isTablet) TabletLayoutTokens.CardPadding else 20.dp),
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -755,14 +835,14 @@ private fun DayDetailCard(
                 Column {
                     Text(
                         text = dayOfWeek,
-                        fontSize = 14.sp,
+                        fontSize = if (adaptiveLayout.isTablet) 17.sp else 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = CrewspaceAccent,
                         letterSpacing = 0.5.sp
                     )
                     Text(
                         text = "$day. $month",
-                        fontSize = 20.sp,
+                        fontSize = if (adaptiveLayout.isTablet) 24.sp else 20.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = CrewspaceTextPrimary
                     )
@@ -772,13 +852,24 @@ private fun DayDetailCard(
                     onClick = onAddEvent,
                     colors = ButtonDefaults.buttonColors(containerColor = CrewspaceAccent),
                     shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.height(40.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    modifier = Modifier.height(if (adaptiveLayout.isTablet) 52.dp else 40.dp),
+                    contentPadding =
+                        PaddingValues(horizontal = if (adaptiveLayout.isTablet) 20.dp else 16.dp),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(if (adaptiveLayout.isTablet) 24.dp else 18.dp),
+                    )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Termin", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(
+                        text = "Termin",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = if (adaptiveLayout.isTablet) 17.sp else 14.sp,
+                    )
                 }
             }
 
@@ -795,7 +886,7 @@ private fun DayDetailCard(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(56.dp)
+                            .size(if (adaptiveLayout.isTablet) 68.dp else 56.dp)
                             .clip(CircleShape)
                             .background(CrewspaceCardBg),
                         contentAlignment = Alignment.Center
@@ -804,13 +895,13 @@ private fun DayDetailCard(
                             Icons.Outlined.DateRange,
                             contentDescription = null,
                             tint = CrewspaceTextSecondary.copy(alpha = 0.3f),
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(if (adaptiveLayout.isTablet) 34.dp else 28.dp)
                         )
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "Alles ruhig heute",
-                        fontSize = 16.sp,
+                        fontSize = if (adaptiveLayout.isTablet) 19.sp else 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = CrewspaceTextSecondary
                     )
@@ -842,14 +933,14 @@ private fun DayDetailCard(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = event.title,
-                                        fontSize = 15.sp,
+                                        fontSize = if (adaptiveLayout.isTablet) 18.sp else 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = CrewspaceTextPrimary
                                     )
                                     if (event.startTime != null) {
                                         Text(
                                             text = " • ${event.startTime}",
-                                            fontSize = 13.sp,
+                                            fontSize = if (adaptiveLayout.isTablet) 15.sp else 13.sp,
                                             color = CrewspaceAccent,
                                             fontWeight = FontWeight.SemiBold
                                         )
@@ -867,7 +958,7 @@ private fun DayDetailCard(
                                 if (subText.isNotBlank()) {
                                     Text(
                                         text = subText,
-                                        fontSize = 12.sp,
+                                        fontSize = if (adaptiveLayout.isTablet) 14.sp else 12.sp,
                                         color = CrewspaceTextSecondary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -877,13 +968,13 @@ private fun DayDetailCard(
 
                             IconButton(
                                 onClick = { onDeleteEvent(event) },
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(if (adaptiveLayout.isTablet) 48.dp else 32.dp),
                             ) {
                                 Icon(
                                     Icons.Default.Delete,
                                     contentDescription = "Löschen",
                                     tint = Color(0xFFEF4444).copy(alpha = 0.5f),
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(if (adaptiveLayout.isTablet) 20.dp else 16.dp)
                                 )
                             }
                         }
@@ -901,14 +992,21 @@ private fun DayDetailCard(
 @Composable
 private fun CrewTabContent(uiState: CrewspaceUiState, viewModel: CrewspaceViewModel) {
     val scrollState = rememberScrollState()
+    val adaptiveLayout = currentAdaptiveLayout()
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .imePadding() // Sicherstellen, dass die Tastatur die Felder nicht verdeckt
-            .verticalScroll(scrollState)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .imePadding() // Sicherstellen, dass die Tastatur die Felder nicht verdeckt
+                .verticalScroll(scrollState)
+                .padding(
+                    horizontal = if (adaptiveLayout.isTablet) adaptiveLayout.horizontalScreenPadding else 16.dp,
+                    vertical = if (adaptiveLayout.isTablet) 12.dp else 8.dp,
+                ),
+        verticalArrangement =
+            Arrangement.spacedBy(if (adaptiveLayout.isTablet) TabletLayoutTokens.SectionSpacing else 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // ── Card 1: "X an Bord" Übersicht ──
         CrewOnBoardCard(uiState = uiState, viewModel = viewModel)
@@ -924,14 +1022,20 @@ private fun CrewTabContent(uiState: CrewspaceUiState, viewModel: CrewspaceViewMo
 
 @Composable
 private fun CrewOnBoardCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewModel) {
+    val adaptiveLayout = currentAdaptiveLayout()
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            if (adaptiveLayout.isTablet) {
+                Modifier.widthIn(max = adaptiveLayout.compactContentMaxWidth).fillMaxWidth()
+            } else {
+                Modifier.fillMaxWidth()
+            },
         color = CrewspaceSurface,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) TabletLayoutTokens.CardCornerRadius else 24.dp),
         shadowElevation = 2.dp
     ) {
         Column(
-            modifier = Modifier.padding(20.dp)
+            modifier = Modifier.padding(if (adaptiveLayout.isTablet) TabletLayoutTokens.CardPadding else 20.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -941,7 +1045,7 @@ private fun CrewOnBoardCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewM
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(if (adaptiveLayout.isTablet) 48.dp else 40.dp)
                             .clip(CircleShape)
                             .background(CrewspaceAccent.copy(alpha = 0.1f)),
                         contentAlignment = Alignment.Center
@@ -950,13 +1054,13 @@ private fun CrewOnBoardCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewM
                             text = "${uiState.onBoardCount}",
                             color = CrewspaceAccent,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 18.sp
+                            fontSize = if (adaptiveLayout.isTablet) 21.sp else 18.sp
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = "Aktuell an Bord",
-                        fontSize = 18.sp,
+                        fontSize = if (adaptiveLayout.isTablet) 21.sp else 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = CrewspaceTextPrimary
                     )
@@ -979,7 +1083,7 @@ private fun CrewOnBoardCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewM
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(if (adaptiveLayout.isTablet) 54.dp else 44.dp)
                                 .clip(CircleShape)
                                 .background(CrewspaceAccent.copy(alpha = 0.05f))
                                 .border(1.dp, CrewspaceAccent.copy(alpha = 0.1f), CircleShape),
@@ -989,7 +1093,7 @@ private fun CrewOnBoardCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewM
                                 text = member.name.take(1).uppercase(),
                                 color = CrewspaceAccent,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
+                                fontSize = if (adaptiveLayout.isTablet) 19.sp else 16.sp
                             )
                         }
                         Spacer(modifier = Modifier.width(12.dp))
@@ -997,42 +1101,63 @@ private fun CrewOnBoardCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewM
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = member.name,
-                                fontSize = 16.sp,
+                                fontSize = if (adaptiveLayout.isTablet) 19.sp else 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = CrewspaceTextPrimary
                             )
                             Text(
                                 text = member.crewRole.label,
-                                fontSize = 13.sp,
+                                fontSize = if (adaptiveLayout.isTablet) 15.sp else 13.sp,
                                 color = CrewspaceTextSecondary,
                                 fontWeight = FontWeight.Medium
                             )
                         }
 
-                        Box(
-                            modifier = Modifier
-                                .size(16.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (member.isOnBoard) Color(0xFF10B981)
-                                    else Color(0xFFEF4444)
+                        if (adaptiveLayout.isTablet) {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(48.dp)
+                                        .clickable {
+                                            viewModel.updateCrew(member.copy(isOnBoard = !member.isOnBoard))
+                                        },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(18.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (member.isOnBoard) Color(0xFF10B981) else Color(0xFFEF4444),
+                                            ),
                                 )
-                                .clickable {
-                                    viewModel.updateCrew(member.copy(isOnBoard = !member.isOnBoard))
-                                }
-                        )
+                            }
+                        } else {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(16.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (member.isOnBoard) Color(0xFF10B981) else Color(0xFFEF4444),
+                                        ).clickable {
+                                            viewModel.updateCrew(member.copy(isOnBoard = !member.isOnBoard))
+                                        },
+                            )
+                        }
 
                         Spacer(modifier = Modifier.width(12.dp))
 
                         IconButton(
                             onClick = { viewModel.deleteCrew(member) },
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(if (adaptiveLayout.isTablet) 48.dp else 28.dp),
                         ) {
                             Icon(
                                 Icons.Default.Delete,
                                 contentDescription = "Entfernen",
                                 tint = Color(0xFFEF4444).copy(alpha = 0.8f),
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(if (adaptiveLayout.isTablet) 20.dp else 14.dp)
                             )
                         }
                     }
@@ -1041,7 +1166,7 @@ private fun CrewOnBoardCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewM
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Noch keine Crewmitglieder hinzugefügt.",
-                    fontSize = 14.sp,
+                    fontSize = if (adaptiveLayout.isTablet) 17.sp else 14.sp,
                     color = CrewspaceTextSecondary,
                     modifier = Modifier.padding(vertical = 8.dp),
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
@@ -1055,20 +1180,26 @@ private fun CrewOnBoardCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewM
 
 @Composable
 private fun CrewAddMemberCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewModel) {
+    val adaptiveLayout = currentAdaptiveLayout()
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            if (adaptiveLayout.isTablet) {
+                Modifier.widthIn(max = adaptiveLayout.overlayMaxWidth).fillMaxWidth()
+            } else {
+                Modifier.fillMaxWidth()
+            },
         color = CrewspaceSurface,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) TabletLayoutTokens.CardCornerRadius else 24.dp),
         shadowElevation = 2.dp
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.padding(if (adaptiveLayout.isTablet) TabletLayoutTokens.CardPadding else 20.dp),
+            verticalArrangement = Arrangement.spacedBy(if (adaptiveLayout.isTablet) 20.dp else 16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(if (adaptiveLayout.isTablet) 44.dp else 36.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(CrewspaceAccent.copy(alpha = 0.1f)),
                     contentAlignment = Alignment.Center
@@ -1077,13 +1208,13 @@ private fun CrewAddMemberCard(uiState: CrewspaceUiState, viewModel: CrewspaceVie
                         Icons.Outlined.PersonAdd,
                         contentDescription = null,
                         tint = CrewspaceAccent,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(if (adaptiveLayout.isTablet) 25.dp else 20.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = "Mitglied hinzufügen",
-                    fontSize = 18.sp,
+                    fontSize = if (adaptiveLayout.isTablet) 22.sp else 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = CrewspaceTextPrimary
                 )
@@ -1098,14 +1229,18 @@ private fun CrewAddMemberCard(uiState: CrewspaceUiState, viewModel: CrewspaceVie
                 },
                 placeholder = "Name des Crewmitglieds",
                 leadingIcon = {
-                    Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        modifier = Modifier.size(if (adaptiveLayout.isTablet) 24.dp else 20.dp),
+                    )
                 }
             )
 
             Column {
                 Text(
                     text = "ROLLE AN BORD",
-                    fontSize = 11.sp,
+                    fontSize = if (adaptiveLayout.isTablet) 13.sp else 11.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = CrewspaceTextSecondary,
                     letterSpacing = 1.sp,
@@ -1128,10 +1263,14 @@ private fun CrewAddMemberCard(uiState: CrewspaceUiState, viewModel: CrewspaceVie
                             shape = RoundedCornerShape(12.dp),
                             border = if (!isSelected) BorderStroke(1.dp, CrewspaceDivider) else null
                         ) {
-                            Box(modifier = Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier =
+                                    Modifier.padding(vertical = if (adaptiveLayout.isTablet) 14.dp else 10.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
                                 Text(
                                     text = role.label,
-                                    fontSize = 13.sp,
+                                    fontSize = if (adaptiveLayout.isTablet) 16.sp else 13.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                     color = if (isSelected) Color.White else CrewspaceTextPrimary
                                 )
@@ -1148,7 +1287,11 @@ private fun CrewAddMemberCard(uiState: CrewspaceUiState, viewModel: CrewspaceVie
                 },
                 placeholder = "Notfallkontakt (Name)",
                 leadingIcon = {
-                    Icon(Icons.Default.ContactPhone, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Icon(
+                        Icons.Default.ContactPhone,
+                        contentDescription = null,
+                        modifier = Modifier.size(if (adaptiveLayout.isTablet) 24.dp else 20.dp),
+                    )
                 }
             )
 
@@ -1160,7 +1303,11 @@ private fun CrewAddMemberCard(uiState: CrewspaceUiState, viewModel: CrewspaceVie
                 placeholder = "Notfall-Telefonnummer",
                 keyboardType = KeyboardType.Phone,
                 leadingIcon = {
-                    Icon(Icons.Outlined.Phone, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Icon(
+                        Icons.Outlined.Phone,
+                        contentDescription = null,
+                        modifier = Modifier.size(if (adaptiveLayout.isTablet) 24.dp else 20.dp),
+                    )
                 }
             )
 
@@ -1171,7 +1318,11 @@ private fun CrewAddMemberCard(uiState: CrewspaceUiState, viewModel: CrewspaceVie
                 },
                 placeholder = "Medizinische Hinweise / Allergien",
                 leadingIcon = {
-                    Icon(Icons.Outlined.MedicalServices, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Icon(
+                        Icons.Outlined.MedicalServices,
+                        contentDescription = null,
+                        modifier = Modifier.size(if (adaptiveLayout.isTablet) 24.dp else 20.dp),
+                    )
                 }
             )
 
@@ -1179,7 +1330,7 @@ private fun CrewAddMemberCard(uiState: CrewspaceUiState, viewModel: CrewspaceVie
                 onClick = { viewModel.addCrewMember() },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp),
+                    .height(if (adaptiveLayout.isTablet) TabletLayoutTokens.PrimaryControlHeight else 54.dp),
                 enabled = uiState.addName.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = CrewspaceAccent,
@@ -1192,7 +1343,7 @@ private fun CrewAddMemberCard(uiState: CrewspaceUiState, viewModel: CrewspaceVie
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Crewmitglied hinzufügen",
-                    fontSize = 16.sp,
+                    fontSize = if (adaptiveLayout.isTablet) 19.sp else 16.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -1214,6 +1365,7 @@ private fun CrewspaceTextField(
     imeAction: ImeAction = ImeAction.Next
 ) {
     val isError = value.any { !it.isLetterOrDigit() && it != ' ' && it != '+' } && placeholder.contains("Name")
+    val adaptiveLayout = currentAdaptiveLayout()
 
     OutlinedTextField(
         value = value,
@@ -1222,7 +1374,7 @@ private fun CrewspaceTextField(
             Text(
                 text = placeholder,
                 color = CrewspaceTextSecondary.copy(alpha = 0.5f),
-                fontSize = 15.sp,
+                fontSize = if (adaptiveLayout.isTablet) 18.sp else 15.sp,
                 fontWeight = FontWeight.Medium
             )
         },
@@ -1232,8 +1384,11 @@ private fun CrewspaceTextField(
         supportingText = if (isError) { { Text("Nur Buchstaben und Zahlen erlaubt") } } else null,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .then(if (adaptiveLayout.isTablet) Modifier.heightIn(min = 64.dp) else Modifier),
+        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = CrewspaceAccent,
             unfocusedBorderColor = CrewspaceDivider,
@@ -1245,7 +1400,11 @@ private fun CrewspaceTextField(
             focusedLeadingIconColor = CrewspaceAccent,
             unfocusedLeadingIconColor = CrewspaceTextSecondary
         ),
-        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        textStyle =
+            androidx.compose.ui.text.TextStyle(
+                fontSize = if (adaptiveLayout.isTablet) 18.sp else 15.sp,
+                fontWeight = FontWeight.SemiBold,
+            ),
     )
 }
 

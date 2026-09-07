@@ -6,20 +6,23 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -44,6 +47,7 @@ import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -57,18 +61,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.trnberechnung.R
@@ -115,6 +123,7 @@ fun DashboardScreen(
     val context = LocalContext.current
     val repo = remember { BoatProfileRepository(context) }
     val scrollState = rememberScrollState()
+    val adaptiveLayout = currentAdaptiveLayout()
 
     var boatName by remember { mutableStateOf(repo.boatName) }
     var boatType by remember { mutableStateOf(repo.boatType.ifBlank { "Segelyacht" }) }
@@ -134,9 +143,13 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .verticalScroll(scrollState)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(
+                    horizontal = if (adaptiveLayout.isTablet) adaptiveLayout.horizontalScreenPadding else 16.dp,
+                    vertical = if (adaptiveLayout.isTablet) 16.dp else 10.dp,
+                ),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement =
+            Arrangement.spacedBy(if (adaptiveLayout.isTablet) TabletLayoutTokens.SectionSpacing else 14.dp),
     ) {
         // Drag Handle & Header Title
         Box(
@@ -149,7 +162,7 @@ fun DashboardScreen(
 
         Text(
             text = "Einstellungen",
-            fontSize = 19.sp,
+            fontSize = if (adaptiveLayout.isTablet) 24.sp else 19.sp,
             fontWeight = FontWeight.ExtraBold,
             color = SettingsTextColor,
             modifier = Modifier.semantics { heading() }
@@ -174,21 +187,21 @@ fun DashboardScreen(
                     contentScale = ContentScale.Crop,
                     modifier =
                         Modifier
-                            .size(52.dp)
-                            .clip(RoundedCornerShape(14.dp)),
+                            .size(if (adaptiveLayout.isTablet) 64.dp else 52.dp)
+                            .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 18.dp else 14.dp)),
                 )
                 Spacer(Modifier.width(14.dp))
                 Column {
                     Text(
                         text = "TideNode",
-                        fontSize = 22.sp,
+                        fontSize = if (adaptiveLayout.isTablet) 27.sp else 22.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = SettingsSectionTitle,
                         letterSpacing = (-0.5).sp,
                     )
                     Text(
                         text = "Profile, Darstellung und Datenquellen",
-                        fontSize = 13.sp,
+                        fontSize = if (adaptiveLayout.isTablet) 16.sp else 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = SettingsSubtitle,
                     )
@@ -222,17 +235,26 @@ fun DashboardScreen(
             Spacer(Modifier.height(12.dp))
 
             // Bootstyp Selector
-            Text("Bootstyp", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SettingsSubtitle)
+            Text(
+                "Bootstyp",
+                fontSize = if (adaptiveLayout.isTablet) 14.sp else 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = SettingsSubtitle,
+            )
             Spacer(Modifier.height(4.dp))
             Box {
                 Row(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .height(52.dp) // Adjusted to 52dp for better touch target
-                            .clip(RoundedCornerShape(16.dp))
+                            .height(if (adaptiveLayout.isTablet) 64.dp else 52.dp)
+                            .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp))
                             .background(SettingsInputBg)
-                            .border(1.dp, SettingsInputBorder, RoundedCornerShape(16.dp))
+                            .border(
+                                1.dp,
+                                SettingsInputBorder,
+                                RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp),
+                            )
                             .clickable(
                                 onClick = { boatTypeExpanded = true },
                                 role = Role.Button,
@@ -245,12 +267,17 @@ fun DashboardScreen(
                     Spacer(Modifier.width(10.dp))
                     Text(
                         text = boatType,
-                        fontSize = 15.sp,
+                        fontSize = if (adaptiveLayout.isTablet) 18.sp else 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF0F172A),
                         modifier = Modifier.weight(1f),
                     )
-                    Icon(Icons.Default.UnfoldMore, null, tint = SettingsPrimaryBlue, modifier = Modifier.size(20.dp))
+                    Icon(
+                        Icons.Default.UnfoldMore,
+                        null,
+                        tint = SettingsPrimaryBlue,
+                        modifier = Modifier.size(if (adaptiveLayout.isTablet) 24.dp else 20.dp),
+                    )
                 }
 
                 DropdownMenu(
@@ -336,7 +363,9 @@ fun DashboardScreen(
                         it.replace(',', '.').toFloatOrNull()?.let { v -> repo.waterLevelCorrection = v }
                     },
                     icon = Icons.Default.Water,
-                    label = "Korrekt",
+                    label = "Pegelkorrektur (m)",
+                    compactLabel = "Pegel ± (m)",
+                    accessibilityLabel = "Pegelkorrektur in Metern",
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -357,10 +386,14 @@ fun DashboardScreen(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .height(56.dp)
-                        .clip(RoundedCornerShape(28.dp))
+                        .height(if (adaptiveLayout.isTablet) 68.dp else 56.dp)
+                        .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 34.dp else 28.dp))
                         .background(SettingsInputBg)
-                        .border(1.dp, SettingsInputBorder, RoundedCornerShape(28.dp))
+                        .border(
+                            1.dp,
+                            SettingsInputBorder,
+                            RoundedCornerShape(if (adaptiveLayout.isTablet) 34.dp else 28.dp),
+                        )
                         .padding(4.dp),
             ) {
                 // Light Mode Button
@@ -369,7 +402,7 @@ fun DashboardScreen(
                         Modifier
                             .weight(1f)
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(24.dp))
+                            .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 30.dp else 24.dp))
                             .background(if (!isDark) SettingsPrimaryBlue else Color.Transparent)
                             .clickable {
                                 isDark = false
@@ -383,7 +416,7 @@ fun DashboardScreen(
                             Icons.Default.WbSunny,
                             contentDescription = "Light Mode",
                             tint = if (!isDark) Color.White else SettingsSubtitle,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(if (adaptiveLayout.isTablet) 30.dp else 24.dp),
                         )
                         if (!isDark) {
                             Box(
@@ -406,7 +439,7 @@ fun DashboardScreen(
                         Modifier
                             .weight(1f)
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(24.dp))
+                            .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 30.dp else 24.dp))
                             .background(if (isDark) SettingsPrimaryBlue else Color.Transparent)
                             .clickable {
                                 isDark = true
@@ -420,7 +453,7 @@ fun DashboardScreen(
                             Icons.Default.NightsStay,
                             contentDescription = "Dark Mode",
                             tint = if (isDark) Color.White else SettingsSubtitle,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(if (adaptiveLayout.isTablet) 30.dp else 24.dp),
                         )
                         if (isDark) {
                             Box(
@@ -452,9 +485,13 @@ fun DashboardScreen(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp))
                         .background(SettingsInputBg)
-                        .border(1.dp, SettingsInputBorder, RoundedCornerShape(16.dp))
+                        .border(
+                            1.dp,
+                            SettingsInputBorder,
+                            RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp),
+                        )
                         .clickable(
                             onClick = {
                                 onReplayOnboarding()
@@ -463,25 +500,49 @@ fun DashboardScreen(
                             role = Role.Button,
                             onClickLabel = "Einführung starten"
                         )
-                        .padding(12.dp),
+                        .padding(if (adaptiveLayout.isTablet) 16.dp else 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
                     modifier =
                         Modifier
-                            .size(38.dp)
+                            .size(if (adaptiveLayout.isTablet) 48.dp else 38.dp)
                             .clip(CircleShape)
                             .background(SettingsBadgeBg),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Default.PlayArrow, null, tint = SettingsPrimaryBlue, modifier = Modifier.size(22.dp))
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        null,
+                        tint = SettingsPrimaryBlue,
+                        modifier = Modifier.size(if (adaptiveLayout.isTablet) 27.dp else 22.dp),
+                    )
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Einführung erneut ansehen", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFFF8FAFC) else Color(0xFF0F172A))
-                    Text("Törnplanung, Wetter und Crew", fontSize = 12.sp, color = SettingsSubtitle)
+                    Text(
+                        "Einführung erneut ansehen",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = if (adaptiveLayout.isTablet) 18.sp else 15.sp,
+                        color =
+                            if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
+                                Color(0xFFF8FAFC)
+                            } else {
+                                Color(0xFF0F172A)
+                            },
+                    )
+                    Text(
+                        "Törnplanung, Wetter und Crew",
+                        fontSize = if (adaptiveLayout.isTablet) 15.sp else 12.sp,
+                        color = SettingsSubtitle,
+                    )
                 }
-                Icon(Icons.Default.ChevronRight, null, tint = SettingsSubtitle, modifier = Modifier.size(20.dp))
+                Icon(
+                    Icons.Default.ChevronRight,
+                    null,
+                    tint = SettingsSubtitle,
+                    modifier = Modifier.size(if (adaptiveLayout.isTablet) 24.dp else 20.dp),
+                )
             }
         }
 
@@ -514,7 +575,7 @@ fun DashboardScreen(
         SettingsCard {
             Text(
                 text = "© 2026 TideNode",
-                fontSize = 17.sp,
+                fontSize = if (adaptiveLayout.isTablet) 20.sp else 17.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = SettingsSectionTitle,
             )
@@ -523,13 +584,13 @@ fun DashboardScreen(
                 text =
                     "TideNode ersetzt keine Seeordnung, amtlichen Bekanntmachungen, Revierinformationen " +
                         "oder die nautische Verantwortung der Schiffsführung.",
-                fontSize = 13.sp,
+                fontSize = if (adaptiveLayout.isTablet) 15.sp else 13.sp,
                 color = SettingsSubtitle,
                 lineHeight = 18.sp,
             )
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(if (adaptiveLayout.isTablet) 32.dp else 20.dp))
     }
 
     if (showOnboardingDialog) {
@@ -548,14 +609,24 @@ fun DashboardScreen(
 private fun SettingsCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
     Column(
         modifier =
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
+            (if (adaptiveLayout.isTablet) {
+                Modifier.widthIn(max = adaptiveLayout.compactContentMaxWidth).fillMaxWidth()
+            } else {
+                Modifier.fillMaxWidth()
+            }).clip(
+                RoundedCornerShape(if (adaptiveLayout.isTablet) TabletLayoutTokens.CardCornerRadius else 24.dp),
+            )
                 .background(SettingsCardBg)
-                .border(1.dp, SettingsInputBorder, RoundedCornerShape(24.dp))
-                .padding(18.dp),
+                .border(
+                    1.dp,
+                    SettingsInputBorder,
+                    RoundedCornerShape(
+                        if (adaptiveLayout.isTablet) TabletLayoutTokens.CardCornerRadius else 24.dp,
+                    ),
+                ).padding(if (adaptiveLayout.isTablet) TabletLayoutTokens.CardPadding else 18.dp),
         content = content,
     )
 }
@@ -565,12 +636,13 @@ private fun SettingsCardHeader(
     icon: ImageVector,
     title: String,
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconBadge(icon)
         Spacer(Modifier.width(10.dp))
         Text(
             text = title,
-            fontSize = 18.sp,
+            fontSize = if (adaptiveLayout.isTablet) 22.sp else 18.sp,
             fontWeight = FontWeight.ExtraBold,
             color = SettingsSectionTitle,
         )
@@ -579,15 +651,21 @@ private fun SettingsCardHeader(
 
 @Composable
 private fun IconBadge(icon: ImageVector, contentDescription: String? = null) {
+    val adaptiveLayout = currentAdaptiveLayout()
     Box(
         modifier =
             Modifier
-                .size(36.dp)
+                .size(if (adaptiveLayout.isTablet) 44.dp else 36.dp)
                 .clip(CircleShape)
                 .background(SettingsBadgeBg),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = SettingsPrimaryBlue, modifier = Modifier.size(20.dp))
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = SettingsPrimaryBlue,
+            modifier = Modifier.size(if (adaptiveLayout.isTablet) 24.dp else 20.dp),
+        )
     }
 }
 
@@ -603,15 +681,40 @@ private fun SettingsInputField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     trailingIcon: @Composable (() -> Unit)? = null,
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
-        placeholder = { Text(placeholder, color = SettingsSubtitle, fontSize = 14.sp) },
-        leadingIcon = { IconBadge(leadingIcon, contentDescription = null) },
+        placeholder = {
+            Text(
+                placeholder,
+                color = SettingsSubtitle,
+                fontSize = if (adaptiveLayout.isTablet) 17.sp else 14.sp,
+            )
+        },
+        leadingIcon = {
+            Box(
+                modifier =
+                    Modifier
+                        // Keep the same 14 dp badge inset and effective 10 dp text gap as Bootstyp.
+                        .width(if (adaptiveLayout.isTablet) 64.dp else 56.dp)
+                        .padding(start = 14.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                IconBadge(leadingIcon, contentDescription = null)
+            }
+        },
         trailingIcon = trailingIcon,
-        modifier = modifier.fillMaxWidth().height(64.dp), // Increased height for label
-        shape = RoundedCornerShape(16.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(if (adaptiveLayout.isTablet) 72.dp else 64.dp),
+        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp),
+        textStyle =
+            LocalTextStyle.current.copy(
+                fontSize = if (adaptiveLayout.isTablet) 18.sp else LocalTextStyle.current.fontSize,
+            ),
         singleLine = true,
         visualTransformation = visualTransformation,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
@@ -633,38 +736,85 @@ private fun SettingsNumberBox(
     onValueChange: (String) -> Unit,
     icon: ImageVector,
     label: String,
+    compactLabel: String? = null,
+    accessibilityLabel: String = label,
     modifier: Modifier = Modifier,
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
+    val density = LocalDensity.current
+    val labelLineCount =
+        if (
+            (!adaptiveLayout.isTablet && density.fontScale > 1f) ||
+            (adaptiveLayout.isTablet && density.fontScale > 1.6f)
+        ) {
+            2
+        } else {
+            1
+        }
+    val baseFieldHeight = if (adaptiveLayout.isTablet) 68.dp else 56.dp
+    val textGroupHeight =
+        with(density) {
+            (if (adaptiveLayout.isTablet) 18.sp else 14.sp).toDp() * labelLineCount.toFloat() +
+                (if (adaptiveLayout.isTablet) 22.sp else 20.sp).toDp()
+        } + 10.dp
+    val fieldHeight = maxOf(baseFieldHeight, textGroupHeight)
     Row(
         modifier =
             modifier
-                // heightIn rather than a fixed height: a floating label that needs more room than
-                // 56 dp used to be cut off instead of making the field grow.
-                .heightIn(min = 56.dp)
-                .clip(RoundedCornerShape(16.dp))
+                .height(fieldHeight)
+                .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp))
                 .background(SettingsInputBg)
-                .border(1.dp, SettingsInputBorder, RoundedCornerShape(16.dp))
-                .padding(horizontal = 10.dp),
+                .border(
+                    1.dp,
+                    SettingsInputBorder,
+                    RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp),
+                ).padding(horizontal = if (adaptiveLayout.isTablet) 14.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconBadge(icon, contentDescription = null)
         Spacer(Modifier.width(8.dp))
-        OutlinedTextField(
+        BasicTextField(
             value = value,
             onValueChange = onValueChange,
-            label = { Text(label, maxLines = 1) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = accessibilityLabel
+                    },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            colors =
-                OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
-                    focusedTextColor = SettingsTextColor,
-                    unfocusedTextColor = SettingsTextColor,
+            textStyle =
+                LocalTextStyle.current.copy(
+                    color = SettingsTextColor,
+                    fontSize = if (adaptiveLayout.isTablet) 18.sp else 16.sp,
+                    lineHeight = if (adaptiveLayout.isTablet) 22.sp else 20.sp,
                 ),
+            cursorBrush = SolidColor(SettingsPrimaryBlue),
+            decorationBox = { innerTextField ->
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val useCompactLabel =
+                        compactLabel != null &&
+                            !adaptiveLayout.isTablet &&
+                            maxWidth < 120.dp * LocalDensity.current.fontScale
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Text(
+                            text = if (useCompactLabel) compactLabel.orEmpty() else label,
+                            color = SettingsSubtitle,
+                            fontSize = if (adaptiveLayout.isTablet) 15.sp else 11.sp,
+                            lineHeight = if (adaptiveLayout.isTablet) 18.sp else 14.sp,
+                            maxLines = labelLineCount,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        innerTextField()
+                    }
+                }
+            },
         )
     }
 }
@@ -675,21 +825,34 @@ private fun DataSourceRow(
     title: String,
     subtitle: String,
 ) {
+    val adaptiveLayout = currentAdaptiveLayout()
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp))
                 .background(SettingsInputBg)
-                .border(1.dp, SettingsInputBorder, RoundedCornerShape(16.dp))
-                .padding(12.dp),
+                .border(
+                    1.dp,
+                    SettingsInputBorder,
+                    RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp),
+                ).padding(if (adaptiveLayout.isTablet) 16.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconBadge(icon)
         Spacer(Modifier.width(12.dp))
         Column {
-            Text(title, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, color = SettingsSectionTitle)
-            Text(subtitle, fontSize = 12.sp, color = SettingsSubtitle)
+            Text(
+                title,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = if (adaptiveLayout.isTablet) 18.sp else 15.sp,
+                color = SettingsSectionTitle,
+            )
+            Text(
+                subtitle,
+                fontSize = if (adaptiveLayout.isTablet) 15.sp else 12.sp,
+                color = SettingsSubtitle,
+            )
         }
     }
 }

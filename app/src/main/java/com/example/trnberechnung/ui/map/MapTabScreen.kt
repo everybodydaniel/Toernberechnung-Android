@@ -342,7 +342,6 @@ fun MapTabScreen(
             RouteResultDashboard(
                 state = routeState,
                 onOpenNauti = nautiViewModel::showChat,
-                onOptimize = planningViewModel::optimizeTörn,
                 onRefreshPassageWindow = planningViewModel::refreshPassageWindow,
                 onStartNavigation = ::requestNavigationStart,
                 onSave = {

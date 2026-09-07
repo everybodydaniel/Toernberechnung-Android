@@ -1,14 +1,17 @@
 package com.example.trnberechnung.ui.components
 
-import android.content.res.Configuration
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -24,15 +27,28 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.trnberechnung.R
+import com.example.trnberechnung.ui.AdaptiveLayout
+import com.example.trnberechnung.ui.TabletLayoutTokens
+import com.example.trnberechnung.ui.currentAdaptiveLayout
+
+internal fun tideNodeAppHeaderHeight(layout: AdaptiveLayout): Dp =
+    when {
+        !layout.isTablet && layout.isLandscape -> 52.dp
+        !layout.isTablet -> 78.dp
+        layout.isLandscape && layout.isLargeTablet -> 68.dp
+        layout.isLandscape -> 64.dp
+        else -> 92.dp
+    }
 
 /**
  * The global app header.
@@ -49,19 +65,65 @@ fun TideNodeAppHeader(
     onColoredBackground: Boolean = false,
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val headerHeight = if (isLandscape) 52.dp else 78.dp
-    val logoSize = if (isLandscape) 30.dp else 42.dp
-    val titleFontSize = if (isLandscape) 20.sp else 28.sp
-    val buttonSize = if (isLandscape) 44.dp else 48.dp
+    val layout = currentAdaptiveLayout()
+    val safeDrawingPadding = WindowInsets.safeDrawing.asPaddingValues()
+    val layoutDirection = LocalLayoutDirection.current
+    val headerHeight = tideNodeAppHeaderHeight(layout)
+    val logoSize =
+        when {
+            !layout.isTablet && layout.isLandscape -> 30.dp
+            !layout.isTablet -> 42.dp
+            layout.isLandscape && layout.isLargeTablet -> 40.dp
+            layout.isLandscape -> 36.dp
+            else -> 50.dp
+        }
+    val titleFontSize =
+        when {
+            !layout.isTablet && layout.isLandscape -> 20.sp
+            !layout.isTablet -> 28.sp
+            layout.isLandscape && layout.isLargeTablet -> 26.sp
+            layout.isLandscape -> 24.sp
+            else -> 34.sp
+        }
+    val buttonSize =
+        when {
+            !layout.isTablet && layout.isLandscape -> 44.dp
+            !layout.isTablet -> 48.dp
+            layout.isLandscape && !layout.isLargeTablet -> 52.dp
+            else -> 56.dp
+        }
+    val iconSize =
+        when {
+            !layout.isTablet -> 23.dp
+            layout.isLargeTablet -> 30.dp
+            else -> TabletLayoutTokens.StandardIconSize
+        }
+    val horizontalPadding = if (layout.isTablet) layout.horizontalScreenPadding else 14.dp
+    val logoSpacing =
+        when {
+            !layout.isTablet && layout.isLandscape -> 6.dp
+            !layout.isTablet -> 9.dp
+            layout.isLandscape -> 8.dp
+            else -> 11.dp
+        }
 
     Box(
         modifier =
             modifier
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.statusBars)
+                .then(
+                    if (layout.isTablet) {
+                        Modifier.padding(
+                            start = safeDrawingPadding.calculateStartPadding(layoutDirection),
+                            top = safeDrawingPadding.calculateTopPadding(),
+                            end = safeDrawingPadding.calculateEndPadding(layoutDirection),
+                        )
+                    } else {
+                        Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                    },
+                )
                 .height(headerHeight)
-                .padding(horizontal = 14.dp),
+                .padding(horizontal = horizontalPadding),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().align(Alignment.Center),
@@ -77,7 +139,7 @@ fun TideNodeAppHeader(
                         .clip(RoundedCornerShape(logoSize * 0.27f))
                         .testTag("app_header_logo"),
             )
-            Spacer(Modifier.size(if (isLandscape) 6.dp else 9.dp))
+            Spacer(Modifier.size(logoSpacing))
             Text(
                 text = "TideNode",
                 // White wherever the header floats over the nautical chart or the Revier gradient,
@@ -100,6 +162,7 @@ fun TideNodeAppHeader(
                 contentDescription = "Einstellungen",
                 onClick = onSettings,
                 size = buttonSize,
+                iconSize = iconSize,
                 modifier = Modifier.testTag("app_header_settings"),
             )
         }
