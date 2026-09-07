@@ -2,13 +2,13 @@ package com.example.trnberechnung.routing.v2
 
 import com.example.trnberechnung.logic.RouterLog
 import com.example.trnberechnung.logic.RuleOfTwelfths
+import com.example.trnberechnung.logic.TideTimes
 import com.example.trnberechnung.model.DepthPoint
 import com.example.trnberechnung.model.RouteSegment
 import com.example.trnberechnung.model.SegmentType
 import com.example.trnberechnung.model.TideEvent
 import org.maplibre.android.geometry.LatLng
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 object NauticalRouterV2 {
 
@@ -45,12 +45,12 @@ object NauticalRouterV2 {
     private val bridgeRules = listOf(
 
         BridgeRule(
-            harbor = LatLng(53.3382, 7.1945),
+            harbor = LatLng(53.3421, 7.1852),
             via = listOf(
-                LatLng(53.3200, 7.1800), 
-                LatLng(53.3100, 7.0500), 
-                LatLng(53.3700, 6.9200), 
-                LatLng(53.4500, 6.9500)  
+                LatLng(53.3200, 7.1800),
+                LatLng(53.3100, 7.0500),
+                LatLng(53.3700, 6.9200),
+                LatLng(53.4500, 6.9500)
             ),
             matchRadiusM = 3_000.0
         ),
@@ -58,8 +58,8 @@ object NauticalRouterV2 {
         BridgeRule(
             harbor = LatLng(53.5150, 8.1500),
             via = listOf(
-                LatLng(53.52743262744863, 8.20080110975966),  
-                LatLng(53.65600309601381, 8.137997413254762)   
+                LatLng(53.52743262744863, 8.20080110975966),
+                LatLng(53.65600309601381, 8.137997413254762)
             ),
             matchRadiusM = 5_000.0
         ),
@@ -67,8 +67,8 @@ object NauticalRouterV2 {
         BridgeRule(
             harbor = LatLng(53.4500, 8.1200),
             via = listOf(
-                LatLng(53.52743262744863, 8.20080110975966),  
-                LatLng(53.65600309601381, 8.137997413254762)   
+                LatLng(53.52743262744863, 8.20080110975966),
+                LatLng(53.65600309601381, 8.137997413254762)
             ),
             matchRadiusM = 5_000.0
         ),
@@ -76,8 +76,8 @@ object NauticalRouterV2 {
         BridgeRule(
             harbor = LatLng(53.6280, 8.0430),
             via = listOf(
-                LatLng(53.660676, 8.102389),                   
-                LatLng(53.65600309601381, 8.137997413254762)   
+                LatLng(53.660676, 8.102389),
+                LatLng(53.65600309601381, 8.137997413254762)
             ),
             matchRadiusM = 5_000.0
         ),
@@ -97,11 +97,61 @@ object NauticalRouterV2 {
         ),
 
         BridgeRule(
-            harbor = LatLng(53.77485124022699, 7.867251072413869),
+            harbor = LatLng(53.7755, 7.8683),
             via = listOf(
-                LatLng(53.768564770764016, 7.863543835115352) 
+                LatLng(53.768564770764016, 7.863543835115352)
             ),
             matchRadiusM = 5_000.0
+        ),
+
+        // Norderney
+        BridgeRule(
+            harbor = LatLng(53.7024, 7.1637),
+            via = listOf(
+                LatLng(53.7000, 7.1637),
+                LatLng(53.6930, 7.1700)
+            ),
+            matchRadiusM = 3_000.0
+        ),
+
+        // Baltrum
+        BridgeRule(
+            harbor = LatLng(53.7229, 7.3669),
+            via = listOf(
+                LatLng(53.7205, 7.3665),
+                LatLng(53.7150, 7.3650)
+            ),
+            matchRadiusM = 3_000.0
+        ),
+
+        // Juist
+        BridgeRule(
+            harbor = LatLng(53.6722, 6.9982),
+            via = listOf(
+                LatLng(53.6700, 6.9982),
+                LatLng(53.6620, 7.0200)
+            ),
+            matchRadiusM = 3_000.0
+        ),
+
+        // Langeoog
+        BridgeRule(
+            harbor = LatLng(53.7263, 7.4968),
+            via = listOf(
+                LatLng(53.7230, 7.4950),
+                LatLng(53.7180, 7.4850)
+            ),
+            matchRadiusM = 3_000.0
+        ),
+
+        // Spiekeroog
+        BridgeRule(
+            harbor = LatLng(53.7632, 7.6955),
+            via = listOf(
+                LatLng(53.7550, 7.6950),
+                LatLng(53.7500, 7.7100)
+            ),
+            matchRadiusM = 3_000.0
         )
     )
 
@@ -199,8 +249,8 @@ object NauticalRouterV2 {
         tideEvents: List<TideEvent> = emptyList()
     ): List<RouteSegment> {
 
-        val startBridges = bridgeForPoint(start) 
-        val endBridges = bridgeForPoint(end).reversed() 
+        val startBridges = bridgeForPoint(start)
+        val endBridges = bridgeForPoint(end).reversed()
         val viaPoints = buildList {
             add(start)
             addAll(startBridges)
@@ -291,25 +341,7 @@ object NauticalRouterV2 {
     }
 
     fun calculateTideOffset(time: LocalDateTime, events: List<TideEvent>): Double {
-        if (events.isEmpty()) return 0.0
-
-        val sorted = events.mapNotNull { event ->
-            try {
-                val cleanTs = event.timestamp
-                    .replace("T", " ")
-                    .replace(Regex("Z$"), "")
-                    .replace(Regex("\\+\\d{2}:\\d{2}$"), "")
-                    .replace(Regex("\\+\\d{2}$"), "")
-                    .trim()
-
-                val dt = try {
-                    LocalDateTime.parse(cleanTs, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                } catch (_: Exception) {
-                    LocalDateTime.parse(cleanTs, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-                }
-                event to dt
-            } catch (_: Exception) { null }
-        }.sortedBy { it.second }
+        val sorted = TideTimes.sortedByTime(events)
 
         if (sorted.isEmpty()) return 0.0
 
@@ -371,9 +403,9 @@ object NauticalRouterV2 {
                 curPoints.add(p)
                 if (d < curMinDepth) curMinDepth = d
             } else {
-                curPoints.add(p) 
+                curPoints.add(p)
                 segments.add(RouteSegment(curPoints, curType, curMinDepth))
-                curPoints = mutableListOf(p) 
+                curPoints = mutableListOf(p)
                 curType = t
                 curMinDepth = d
             }

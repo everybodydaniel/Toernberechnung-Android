@@ -10,26 +10,44 @@ data class PassageCandidateAssessment(
     val waypointClearances: List<ClearanceSample>,
     val allLegsValid: Boolean,
     val safetyMarginMeters: Double = 0.0,
+    val weatherStatus: WeatherStatus = WeatherStatus.BEFAHRBAR,
 ) {
     val isSafe: Boolean
         get() =
             expectedWaypointCount > 0 &&
                 waypointClearances.size == expectedWaypointCount &&
                 allLegsValid &&
+                weatherStatus != WeatherStatus.NICHT_BEFAHRBAR &&
                 waypointClearances.all { sample ->
-                    sample.isValid &&
-                        sample.clearanceMeters != null &&
-                        sample.clearanceMeters >= safetyMarginMeters
+                    val clearance = sample.clearanceMeters
+                    if (!sample.isValid || clearance == null) {
+                        // WICHTIG: Wenn keine Daten vorhanden sind, können wir nicht garantieren,
+                        // dass die Passage sicher ist.
+                        false
+                    } else {
+                        // Wir erlauben nun eine minimale Unterschreitung von 1cm, um numerische Rundungsfehler
+                        // abzufangen.
+                        clearance >= (safetyMarginMeters - 0.01)
+                    }
                 }
 
+    val worstClearance: Double
+        get() = waypointClearances.minOfOrNull { it.clearanceMeters ?: Double.NEGATIVE_INFINITY } ?: Double.NEGATIVE_INFINITY
+
     val bottleneck: ClearanceSample?
-        get() = waypointClearances.minByOrNull { it.clearanceMeters ?: Double.MAX_VALUE }
+        get() = waypointClearances.minByOrNull { it.clearanceMeters ?: Double.NEGATIVE_INFINITY }
 
     val worstQuality: WaterLevelQuality
-        get() =
-            waypointClearances.maxByOrNull { it.waterLevelQuality.qualityRank }
-                ?.waterLevelQuality
-                ?: WaterLevelQuality.UNAVAILABLE
+        get() {
+            val hasMissingData = waypointClearances.any { it.clearanceMeters == null }
+            val baseQuality = waypointClearances.maxByOrNull { it.waterLevelQuality.qualityRank }
+                ?.waterLevelQuality ?: WaterLevelQuality.UNAVAILABLE
+            return if (hasMissingData && baseQuality.qualityRank < WaterLevelQuality.UNAVAILABLE.qualityRank) {
+                WaterLevelQuality.UNAVAILABLE
+            } else {
+                baseQuality
+            }
+        }
 }
 
 fun interface PassageCandidateEvaluator {
@@ -49,14 +67,33 @@ class PassageWindowScanner(
         require(!scanForward.isNegative) { "Der Vorwärtsbereich darf nicht negativ sein." }
     }
 
+    suspend fun findSafeWindow(
+        center: ZonedDateTime,
+        evaluator: PassageCandidateEvaluator,
+    ): PassageWindow? {
+        val berlinCenter = center.withZoneSameInstant(MAP_PLANNING_ZONE_ID)
+        val windows = findSafeWindows(berlinCenter, evaluator)
+
+        // 1. Fenster, das den aktuellen Zeitpunkt enthält
+        windows.find { it.contains(berlinCenter) }?.let { return it }
+
+        // 2. Nächstes zukünftiges Fenster
+        windows.filter { it.start.isAfter(berlinCenter) }
+            .minByOrNull { it.start }?.let { return it }
+
+        // 3. Letztes vergangenes Fenster (als Fallback)
+        return windows.filter { it.end.isBefore(berlinCenter) }
+            .maxByOrNull { it.end }
+    }
+
     suspend fun findSafeWindows(
         center: ZonedDateTime,
         evaluator: PassageCandidateEvaluator,
     ): List<PassageWindow> {
         val berlinCenter = center.withZoneSameInstant(MAP_PLANNING_ZONE_ID)
-        // Wir scannen den gesamten Tag (12h vorher bis 12h nachher), um alle Fenster zu finden
-        val scanStart = berlinCenter.minus(Duration.ofHours(12))
-        val scanEnd = berlinCenter.plus(Duration.ofHours(12))
+        // Wir scannen den konfigurierten Bereich um den gewählten Zeitpunkt
+        val scanStart = berlinCenter.minus(scanBackward)
+        val scanEnd = berlinCenter.plus(scanForward)
         val windows = mutableListOf<PassageWindow>()
         var openWindow: OpenWindow? = null
         var candidate = scanStart
@@ -90,6 +127,7 @@ class PassageWindowScanner(
         val quality: WaterLevelQuality,
         val anchoredHighWater: ZonedDateTime?,
         val bottleneckName: String?,
+        val worstClearance: Double,
     )
 
     private data class OpenWindow(
@@ -98,8 +136,14 @@ class PassageWindowScanner(
         var assessment: SafeAssessment,
     ) {
         fun merge(candidate: SafeAssessment) {
-            if (candidate.quality.qualityRank > assessment.quality.qualityRank) {
+            // Wir behalten die Daten des "sichersten" Zeitpunkts im Fenster (meiste Wassertiefe),
+            // damit die Anzeige von Wattenhoch und Engstelle repräsentativ ist.
+            if (candidate.worstClearance > assessment.worstClearance) {
                 assessment = candidate
+            }
+            // Aber die schlechteste Datenqualität gewinnt immer als Warnung
+            if (candidate.quality.qualityRank > assessment.quality.qualityRank) {
+                assessment = assessment.copy(quality = candidate.quality)
             }
         }
 
@@ -120,6 +164,7 @@ class PassageWindowScanner(
             quality = worstQuality,
             anchoredHighWater = bottleneck?.anchoredHighWater,
             bottleneckName = bottleneck?.waypointName,
+            worstClearance = worstClearance
         )
     }
 }

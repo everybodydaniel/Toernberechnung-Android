@@ -12,7 +12,7 @@ class AStarPathfinder {
     companion object {
         private const val TAG = "AStarPathfinder"
 
-        private const val MAX_EXPANSIONS = 600_000
+        private const val MAX_EXPANSIONS = 1_000_000
 
         private const val STRAIGHT_COST = 1.0
 
@@ -85,9 +85,9 @@ class AStarPathfinder {
                 if (neighborCell.isBlocked) continue
 
                 if (IS_DIAG[d]) {
+                    // Erlaube diagonale Züge, solange nicht BEIDE Nachbarzellen blockiert sind.
+                    // Das ermöglicht das Passieren von engen Engstellen im Watt.
                     if (SeaMask.cellAt(r, nc).isBlocked && SeaMask.cellAt(nr, c).isBlocked) continue
-
-                    if (SeaMask.cellAt(r, nc).isBlocked || SeaMask.cellAt(nr, c).isBlocked) continue
                 }
 
                 val stepCost = if (IS_DIAG[d]) DIAGONAL_COST else STRAIGHT_COST
@@ -144,7 +144,7 @@ class AStarPathfinder {
         val c0 = GridConfig.lonToCol(p.longitude)
         if (SeaMask.isNavigable(r0, c0)) return r0 to c0
 
-        val maxRadius = 80
+        val maxRadius = 150 // Erhöht, um auch aus sehr tief im Land liegenden Häfen Wasser zu finden
         for (radius in 1..maxRadius) {
             val rMin = max(0, r0 - radius)
             val rMax = min(GridConfig.ROWS - 1, r0 + radius)

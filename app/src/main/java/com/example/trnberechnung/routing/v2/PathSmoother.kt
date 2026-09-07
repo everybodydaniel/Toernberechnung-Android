@@ -6,7 +6,7 @@ import kotlin.math.sqrt
 
 internal object PathSmoother {
 
-    private const val DP_EPSILON_M = 80.0
+    private const val DP_EPSILON_M = 40.0
 
     private const val CHAIKIN_ITERATIONS = 2
 
@@ -68,7 +68,7 @@ internal object PathSmoother {
         val tt = t.coerceIn(0.0, 1.0)
         val fx = ax + tt * dx; val fy = ay + tt * dy
 
-        val ddx = (px - fx) / cosMid * 111_320.0 * cosMid 
+        val ddx = (px - fx) / cosMid * 111_320.0 * cosMid
         val ddy = (py - fy) * 111_320.0
         return sqrt(ddx * ddx + ddy * ddy)
     }
@@ -76,7 +76,7 @@ internal object PathSmoother {
     private fun chaikinIter(points: List<LatLng>): List<LatLng> {
         if (points.size < 3) return points
         val out = ArrayList<LatLng>(points.size * 2)
-        out.add(points.first()) 
+        out.add(points.first())
         for (i in 0 until points.size - 1) {
             val p = points[i]
             val q = points[i + 1]
@@ -84,7 +84,7 @@ internal object PathSmoother {
             out.add(LatLng(p.latitude * 0.75 + q.latitude * 0.25, p.longitude * 0.75 + q.longitude * 0.25))
             out.add(LatLng(p.latitude * 0.25 + q.latitude * 0.75, p.longitude * 0.25 + q.longitude * 0.75))
         }
-        out.add(points.last()) 
+        out.add(points.last())
         return out
     }
 

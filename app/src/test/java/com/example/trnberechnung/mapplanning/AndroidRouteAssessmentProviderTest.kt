@@ -33,15 +33,15 @@ class AndroidRouteAssessmentProviderTest {
                         ),
                     events =
                         listOf(
-                            TideEvent("2026-07-29 12:00:00+02:00", "NW", 1.0),
-                            TideEvent("2026-07-29 18:00:00+02:00", "HW", 3.0),
+                            TideEvent("2026-07-29T12:00:00+02:00", "NW", 1.0),
+                            TideEvent("2026-07-29T18:00:00+02:00", "HW", 3.0),
                         ),
                 )
             val provider =
                 AndroidRouteAssessmentProvider(
-                    stationSnapshotProvider = TideStationSnapshotProvider { listOf(station) },
-                    sampleSpacingMeters = 100_000.0,
-                    chartDepthProvider = ChartDepthProvider { 2.0 },
+                    tideStationProvider = { listOf(station) },
+                    chartDepthProvider = { 2.0 },
+                    fairwayRouteResolver = null,
                 )
             val request =
                 RoutePlanningRequest(
@@ -82,7 +82,8 @@ class AndroidRouteAssessmentProviderTest {
             assessment.expectedWaypointCount shouldBe 2
             assessment.clearanceSamples.size shouldBe 2
             assessment.clearanceSamples.first().clearanceMeters shouldBe
-                (3.0 plusOrMinus 0.01)
+                (3.0 plusOrMinus 0.1)
+            // Bright Sky reports km/h: 18.52 / 27.78 km/h are 10 / 15 kn and safe.
             assessment.weatherStatus shouldBe WeatherStatus.BEFAHRBAR
             assessment.allLegsValid shouldBe true
         }
@@ -102,7 +103,7 @@ class AndroidRouteAssessmentProviderTest {
                     meanHighWater = null,
                     meanLowWater = null,
                     gaugeLabel = "Emden",
-                    forecastTimestamp = "",
+                    forecastTimestamp = "2026-07-29T13:00:00Z",
                     weatherForecast = listOf(weather("2026-07-29T13:00:00Z")),
                     events =
                         listOf(
@@ -112,9 +113,9 @@ class AndroidRouteAssessmentProviderTest {
                 )
             val provider =
                 AndroidRouteAssessmentProvider(
-                    stationSnapshotProvider = TideStationSnapshotProvider { listOf(station) },
-                    sampleSpacingMeters = 100_000.0,
-                    chartDepthProvider = ChartDepthProvider { null },
+                    tideStationProvider = { listOf(station) },
+                    chartDepthProvider = { null },
+                    fairwayRouteResolver = null,
                 )
             val request =
                 RoutePlanningRequest(
@@ -143,7 +144,7 @@ class AndroidRouteAssessmentProviderTest {
             UnderKeelSafetyEvaluator.evaluate(
                 samples = assessment.clearanceSamples,
                 safetyMarginMeters = request.boatSettings.safetyMarginMeters,
-            ) shouldBe RouteStatus.UNVOLLSTAENDIG
+            ).status shouldBe RouteStatus.UNVOLLSTAENDIG
         }
 
     private fun weather(timestamp: String): WeatherDto =

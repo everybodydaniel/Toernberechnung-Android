@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.example.trnberechnung.routing.v2.SeaMask
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuBook
@@ -63,6 +64,7 @@ import com.example.trnberechnung.mapplanning.AndroidRouteAssessmentProvider
 import com.example.trnberechnung.mapplanning.CatalogFairwayRouteResolver
 import com.example.trnberechnung.mapplanning.RoutePlanningViewModel
 import com.example.trnberechnung.mapplanning.RoutePlanningViewModelFactory
+import com.example.trnberechnung.mapplanning.SimpleTidalCurrentProvider
 import com.example.trnberechnung.nauti.GeminiNautiClient
 import com.example.trnberechnung.repository.TideRepository
 import com.example.trnberechnung.navigation.ActiveVoyageState
@@ -144,12 +146,17 @@ fun MainAppScreen(
         viewModel(
             factory =
                 remember(viewModel) {
+                    val assessmentProvider = AndroidRouteAssessmentProvider(
+                        tideStationProvider = { viewModel.allStations.value },
+                        chartDepthProvider = { point ->
+                            if (SeaMask.isReady.value) SeaMask.depthAtLatLng(point.latitude, point.longitude) else null
+                        },
+                        fairwayRouteResolver = CatalogFairwayRouteResolver,
+                    )
                     RoutePlanningViewModelFactory(
-                        AndroidRouteAssessmentProvider(
-                            stations = viewModel.allStations,
-                            fairwayRouteResolver = CatalogFairwayRouteResolver,
-                        ),
+                        routeAssessmentProvider = assessmentProvider,
                         metricRouteResolver = CatalogFairwayRouteResolver,
+                        currentVectorProvider = SimpleTidalCurrentProvider { viewModel.allStations.value }
                     )
                 },
         )

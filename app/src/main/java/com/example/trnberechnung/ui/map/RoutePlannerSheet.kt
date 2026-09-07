@@ -782,14 +782,6 @@ private fun PassageWindowCard(
     }
 }
 
-private fun passageWindowText(uiState: RoutePlanningUiState): String {
-    if (uiState.isSearchingPassageWindow) return "Wird berechnet…"
-    val window = uiState.passageWindow
-        ?: return "Für diese Route liegt noch kein Passagefenster vor."
-    return "${window.start.format(routeTimeFormatter)} – " +
-        "${window.end.format(routeTimeFormatter)} Uhr"
-}
-
 @Composable
 private fun IntermediateStopsPicker(
     existingStops: List<IntermediateStop>,

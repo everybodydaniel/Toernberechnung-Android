@@ -59,7 +59,7 @@ class PassageWindowScannerTest {
         }
 
     @Test
-    fun `candidate is unsafe unless every expected waypoint has clearance`() =
+    fun `candidate is unsafe if some waypoints have missing data (strict mode)`() =
         runTest {
             val window =
                 scanner.findSafeWindow(
@@ -71,9 +71,28 @@ class PassageWindowScannerTest {
                                 waypointClearances =
                                     listOf(
                                         ClearanceSample("Emden", 1.0),
-                                        ClearanceSample("Juist", null),
+                                        ClearanceSample("Juist", null), // Missing data
                                     ),
                                 allLegsValid = true,
+                            )
+                        },
+                )
+
+            window shouldBe null
+        }
+
+    @Test
+    fun `candidate is unsafe when route assessment marks a leg invalid`() =
+        runTest {
+            val window =
+                scanner.findSafeWindow(
+                    center = center,
+                    evaluator =
+                        PassageCandidateEvaluator {
+                            PassageCandidateAssessment(
+                                expectedWaypointCount = 1,
+                                waypointClearances = listOf(ClearanceSample("Fahrwasser", 2.0)),
+                                allLegsValid = false,
                             )
                         },
                 )

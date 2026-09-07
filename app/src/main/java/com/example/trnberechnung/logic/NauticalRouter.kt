@@ -15,7 +15,13 @@ object NauticalRouter {
 
     private const val TAG = "NauticalRouter"
 
-    data class WP(val id: String, val lat: Double, val lon: Double, val chartDepth: Double = -1.5)
+    data class WP(
+        val id: String,
+        val lat: Double,
+        val lon: Double,
+        val chartDepth: Double = -1.5,
+        val isSeegat: Boolean = false,
+    )
 
     sealed interface FairwayPathResult {
         data class Success(val waypoints: List<WP>) : FairwayPathResult
@@ -105,10 +111,10 @@ object NauticalRouter {
         WP("sea_wangerooge",  53.820, 7.920, 15.0),
 
         // === SEEGATTEN (Tidenrinnen zwischen Inseln) ===
-        WP("seegat_baltrum",    53.740, 7.350, 3.0),  // Accumer Ee
-        WP("seegat_langeoog",   53.770, 7.630, 2.5),  // Otzumer Balje
-        WP("seegat_spiekeroog", 53.790, 7.810, 2.0),  // Harle
-        WP("seegat_wangerooge", 53.800, 8.020, 4.0),  // Blaue Balje
+        WP("seegat_baltrum",    53.740, 7.350, 3.0, isSeegat = true),  // Accumer Ee
+        WP("seegat_langeoog",   53.770, 7.630, 2.5, isSeegat = true),  // Otzumer Balje
+        WP("seegat_spiekeroog", 53.790, 7.810, 2.0, isSeegat = true),  // Harle
+        WP("seegat_wangerooge", 53.800, 8.020, 4.0, isSeegat = true),  // Blaue Balje
 
         // === LEYBUCHT (Ems ↔ Norddeich) ===
         WP("leybucht_w",      53.530, 6.920, -0.3),
@@ -118,14 +124,14 @@ object NauticalRouter {
 
         // === HAFEN-WAYPOINTS — 1:1 mit TideViewModel.LOCAL_HARBOURS ===
         // (keine *_p-Duplikate mehr)
-        WP("borkum_hbr",      53.5572, 6.7525, 4.0),
-        WP("juist_hbr",       53.6732, 7.0015, -1.2),
-        WP("norderney_hbr",   53.7012, 7.1585, 1.5),
-        WP("baltrum_hbr",     53.7215, 7.3715, -1.0),
-        WP("langeoog_hbr",    53.7285, 7.5095, -0.5),
-        WP("spiekeroog_hbr",  53.7645, 7.6955, -0.8),
-        WP("wangerooge_hbr",  53.7852, 7.8965, -0.6),
-        WP("emden_hbr",       53.3382, 7.1945, 7.0),
+        WP("borkum_hbr",      53.5606, 6.7502, 3.0),
+        WP("juist_hbr",       53.6722, 6.9982, -1.2),
+        WP("norderney_hbr",   53.7024, 7.1637, 1.5),
+        WP("baltrum_hbr",     53.7229, 7.3669, -1.0),
+        WP("langeoog_hbr",    53.7263, 7.4968, -0.5),
+        WP("spiekeroog_hbr",  53.7632, 7.6955, -0.8),
+        WP("wangerooge_hbr",  53.7755, 7.8683, -0.6),
+        WP("emden_hbr",       53.3421, 7.1852, 5.0),
         WP("norddeich_hbr",   53.6265, 7.1615, 1.5),
         WP("nessmersiel_hbr", 53.6865, 7.3615, -1.5),
         WP("dornum_hbr",      53.6865, 7.4785, -1.5),

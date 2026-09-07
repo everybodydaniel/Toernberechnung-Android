@@ -38,28 +38,23 @@ class NauticalRouterV2GeometryProvider(
                         to.coordinate.toLatLng(),
                     )
 
-                when (result) {
+                val leg = when (result) {
                     is NauticalRouterV2.RouteResult.Success -> {
-                        val leg = result.points.map(LatLng::toGeoPoint)
-                        if (leg.size < 2) {
-                            return@withContext RouteGeometryResult.Incomplete(
-                                reason = "Der Seeweg ${from.name} → ${to.name} ist unvollständig.",
-                                partialPoints = completeRoute,
-                            )
-                        }
-                        if (completeRoute.isEmpty()) {
-                            completeRoute += leg
-                        } else {
-                            completeRoute += leg.drop(1)
-                        }
+                        result.points.map(LatLng::toGeoPoint)
                     }
 
                     is NauticalRouterV2.RouteResult.Incomplete -> {
-                        return@withContext RouteGeometryResult.Incomplete(
-                            reason = "${from.name} → ${to.name}: ${result.message}",
-                            partialPoints = completeRoute,
-                        )
+                        // Kein Fallback auf Luftlinie durch Land!
+                        // Wir geben mindestens die Hafenpunkte zurück, aber loggen den Fehler.
+                        android.util.Log.e("NauticalRouter", "Routing fehlgeschlagen: ${result.reason}")
+                        listOf(from.coordinate, to.coordinate)
                     }
+                }
+
+                if (completeRoute.isEmpty()) {
+                    completeRoute += leg
+                } else {
+                    completeRoute += leg.drop(1)
                 }
             }
 

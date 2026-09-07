@@ -94,6 +94,9 @@ data class RouteMetrics(
     val worstHighWater: ZonedDateTime? = null,
     val maxWindKnots: Double? = null,
     val maxGustKnots: Double? = null,
+    val averageTrueCourseDegrees: Double? = null,
+    val averageCurrentSetDegrees: Double? = null,
+    val averageCurrentDriftKnots: Double? = null,
 ) {
     val totalDieselLiters: Double get() = dieselLiters + dieselReserveLiters
     val requiredDepthMeters: Double get() = draftMeters + safetyMarginMeters
@@ -143,6 +146,7 @@ data class RoutePlanningUiState(
     val passageWindows: List<PassageWindow> = emptyList(),
     val isCalculating: Boolean = false,
     val isSearchingPassageWindow: Boolean = false,
+    val failureReason: SafetyFailureReason = SafetyFailureReason.NONE,
     val messages: List<String> = emptyList(),
     val error: String? = null,
 ) {
@@ -164,5 +168,14 @@ data class RoutePlanningUiState(
         }
 
     val passageWindow: PassageWindow?
-        get() = passageWindows.firstOrNull()
+        get() {
+            if (passageWindows.isEmpty()) return null
+            // 1. Fenster, das den gewählten Abfahrtszeitpunkt enthält
+            passageWindows.find { it.contains(departure) }?.let { return it }
+            // 2. Nächstes zukünftiges Fenster
+            passageWindows.filter { it.start.isAfter(departure) }
+                .minByOrNull { it.start }?.let { return it }
+            // 3. Fallback: Das erste verfügbare Fenster
+            return passageWindows.firstOrNull()
+        }
 }

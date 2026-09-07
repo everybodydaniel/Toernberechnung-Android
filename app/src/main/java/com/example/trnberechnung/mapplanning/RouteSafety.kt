@@ -77,6 +77,16 @@ object WeatherSafetyEvaluator {
         second: WeatherStatus,
     ): WeatherStatus =
         listOf(first, second).maxBy(WeatherStatus::precedence)
+
+    fun checkWindAgainstCurrent(
+        assessment: MarineWeatherAssessment?,
+        isSeegat: Boolean,
+    ): Boolean {
+        if (assessment == null || !isSeegat) return false
+        // Wind gegen Strom: Wenn Wind > 4 Bft (ca. 11-16 kn) und gegenläufig
+        // Da wir keine Strömungsrichtung haben, warnen wir pauschal ab 15kn im Seegat
+        return assessment.windKnots >= 15.0
+    }
 }
 
 data class ClearanceSample(
@@ -85,45 +95,86 @@ data class ClearanceSample(
     val isValid: Boolean = true,
     val waterLevelQuality: WaterLevelQuality = WaterLevelQuality.LOCAL_OFFICIAL,
     val anchoredHighWater: ZonedDateTime? = null,
+    val arrivalTime: ZonedDateTime? = null,
+    val safeWindowEnd: ZonedDateTime? = null,
 )
 
 object UnderKeelSafetyEvaluator {
+    data class EvaluationResult(
+        val status: RouteStatus,
+        val reason: SafetyFailureReason,
+        val message: String? = null
+    )
+
     fun evaluate(
         samples: List<ClearanceSample>,
         safetyMarginMeters: Double,
         allLegsValid: Boolean = true,
-    ): RouteStatus {
+    ): EvaluationResult {
         require(safetyMarginMeters >= 0) {
             "Der Sicherheitsabstand darf nicht negativ sein."
         }
-        if (samples.isEmpty()) return RouteStatus.UNVOLLSTAENDIG
-
-        // Wenn Daten fehlen, ist die Route UNVOLLSTÄNDIG, egal wie tief das Wasser an anderen Stellen ist.
-        if (!allLegsValid || samples.any { !it.isValid || it.clearanceMeters == null }) {
-            return RouteStatus.UNVOLLSTAENDIG
+        if (samples.isEmpty()) {
+            return EvaluationResult(RouteStatus.UNVOLLSTAENDIG, SafetyFailureReason.UNAVAILABLE_DATA)
         }
+
+        var worstReason = SafetyFailureReason.NONE
 
         val statuses =
             samples.map { sample ->
-                when {
-                    sample.clearanceMeters != null && sample.clearanceMeters < 0 ->
+                val status = when {
+                    sample.clearanceMeters != null && sample.clearanceMeters <= -0.01 -> {
+                        worstReason = SafetyFailureReason.INSUFFICIENT_DEPTH
                         RouteStatus.NICHT_BEFAHRBAR
+                    }
+
+                    !sample.isValid || sample.clearanceMeters == null -> {
+                        if (worstReason == SafetyFailureReason.NONE) worstReason = SafetyFailureReason.UNAVAILABLE_DATA
+                        RouteStatus.UNVOLLSTAENDIG
+                    }
 
                     sample.waterLevelQuality == WaterLevelQuality.STALE ||
                         sample.waterLevelQuality == WaterLevelQuality.OUTSIDE_FORECAST_HORIZON ||
-                        sample.waterLevelQuality == WaterLevelQuality.UNAVAILABLE ->
+                        sample.waterLevelQuality == WaterLevelQuality.UNAVAILABLE -> {
+                        if (worstReason == SafetyFailureReason.NONE) worstReason = SafetyFailureReason.UNAVAILABLE_DATA
                         RouteStatus.UNVOLLSTAENDIG
+                    }
 
-                    sample.clearanceMeters!! < safetyMarginMeters ||
-                        sample.waterLevelQuality == WaterLevelQuality.MANUAL ||
+                    sample.clearanceMeters < safetyMarginMeters -> {
+                        if (worstReason == SafetyFailureReason.NONE) worstReason = SafetyFailureReason.INSUFFICIENT_DEPTH
+                        RouteStatus.EINGESCHRAENKT
+                    }
+
+                    sample.waterLevelQuality == WaterLevelQuality.MANUAL ||
                         sample.waterLevelQuality == WaterLevelQuality.CONFIRMED_COMPARISON ->
                         RouteStatus.EINGESCHRAENKT
 
                     else -> RouteStatus.BEFAHRBAR
                 }
+                status
             }
 
-        return statuses.maxBy(RouteStatus::precedence)
+        val maxStatus = statuses.maxBy(RouteStatus::precedence)
+
+        // Zusätzliche Prüfung: Wenn die Ankunft am Zielhafen nach dem Ende des sicheren Fensters liegt
+        val lastSample = samples.lastOrNull()
+        val arrival = lastSample?.arrivalTime
+        val windowEnd = lastSample?.safeWindowEnd
+
+        val (finalStatus, finalReason) = if (arrival != null && windowEnd != null && arrival.isAfter(windowEnd.minusMinutes(5))) {
+            val status = if (maxStatus.precedence < RouteStatus.EINGESCHRAENKT.precedence) RouteStatus.EINGESCHRAENKT else maxStatus
+            status to SafetyFailureReason.TIME_PRESSURE
+        } else {
+            maxStatus to worstReason
+        }
+
+        val constrainedStatus = if (!allLegsValid && finalStatus.precedence < RouteStatus.UNVOLLSTAENDIG.precedence) {
+            if (samples.any { it.clearanceMeters != null }) finalStatus else RouteStatus.UNVOLLSTAENDIG
+        } else {
+            finalStatus
+        }
+
+        return EvaluationResult(constrainedStatus, finalReason)
     }
 }
 
@@ -148,7 +199,24 @@ data class RouteAssessmentInput(
     val routeGeometry: List<GeoPoint>,
     val routeMetrics: RouteMetrics,
     val isScan: Boolean = false,
+    val currentProvider: CurrentVectorProvider? = null
 )
+
+enum class SafetyFailureReason {
+    INSUFFICIENT_DEPTH,
+    WEATHER_DANGER,
+    TIME_PRESSURE,
+    UNAVAILABLE_DATA,
+    NONE;
+
+    fun toDisplayString(): String = when (this) {
+        INSUFFICIENT_DEPTH -> "Wassertiefe für Tiefgang + Sicherheit zu gering."
+        WEATHER_DANGER -> "Wetterbedingungen (Wind/Sicht) zu gefährlich."
+        TIME_PRESSURE -> "Ankunft liegt außerhalb des sicheren Gezeitenfensters."
+        UNAVAILABLE_DATA -> "Unzureichende Gezeiten- oder Wetterdaten für diese Route."
+        NONE -> "Keine Einschränkungen erkannt."
+    }
+}
 
 data class RouteSafetyAssessment(
     val expectedWaypointCount: Int,
@@ -158,6 +226,7 @@ data class RouteSafetyAssessment(
     val messages: List<String> = emptyList(),
     val maxWindKnots: Double? = null,
     val maxGustKnots: Double? = null,
+    val criticalSample: ClearanceSample? = null,
 ) {
     val worstClearanceSample: ClearanceSample?
         get() = clearanceSamples.filter { it.clearanceMeters != null }
@@ -165,10 +234,21 @@ data class RouteSafetyAssessment(
 
     val worstClearanceMeters: Double?
         get() = worstClearanceSample?.clearanceMeters
+
+    val bottleneckSample: ClearanceSample?
+        get() = criticalSample ?: worstClearanceSample
 }
 
 fun interface RouteAssessmentProvider {
     suspend fun assess(input: RouteAssessmentInput): RouteSafetyAssessment
+}
+
+fun interface ChartDepthProvider {
+    fun depthMetersAt(point: GeoPoint): Double?
+}
+
+fun interface TideStationProvider {
+    suspend fun getStations(): List<com.example.trnberechnung.model.TideStationData>
 }
 
 object IncompleteRouteAssessmentProvider : RouteAssessmentProvider {

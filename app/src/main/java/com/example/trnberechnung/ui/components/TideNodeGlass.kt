@@ -29,11 +29,9 @@ val TideNodeBlue = Color(0xFF24579F)
 /** [TideNodeBlue] lightened for dark surfaces, where the deep blue loses its contrast. */
 val TideNodeBlueLight = Color(0xFF60A5FA)
 val TideNodeCyan = Color(0xFF09B7D6)
-val TideNodeTeal = Color(0xFF12B8A6)
 val TideNodeWarning = Color(0xFFF59E0B)
 val TideNodeDanger = Color(0xFFDC2626)
 val TideNodeSuccess = Color(0xFF15803D)
-val TideNodeGlassBorder = Color.White.copy(alpha = 0.68f)
 
 @Composable
 fun Modifier.tideNodeGlass(

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.CompassCalibration
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.HourglassTop
@@ -83,6 +84,7 @@ import com.example.trnberechnung.ui.components.tideNodeGlass
 import java.time.Duration
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 enum class RouteDashboardMode {
     COMPACT,
@@ -94,6 +96,7 @@ enum class RouteDashboardMode {
 fun RouteResultDashboard(
     state: RoutePlanningUiState,
     onOpenNauti: () -> Unit,
+    onOptimize: () -> Unit,
     onRefreshPassageWindow: () -> Unit,
     onStartNavigation: () -> Unit,
     onSave: () -> Unit,
@@ -110,6 +113,7 @@ fun RouteResultDashboard(
         mode = mode,
         onModeChange = { mode = it },
         onOpenNauti = onOpenNauti,
+        onOptimize = onOptimize,
         onRefreshPassageWindow = onRefreshPassageWindow,
         onNavigate = onStartNavigation,
         onSave = onSave,
@@ -133,6 +137,7 @@ fun RouteResultDashboard(
         mode = mode,
         onModeChange = onModeChange,
         onOpenNauti = onOpenNauti,
+        onOptimize = viewModel::optimizeTörn,
         onRefreshPassageWindow = viewModel::refreshPassageWindow,
         onNavigate = onNavigate,
         onSave = onSave,
@@ -146,6 +151,7 @@ fun RouteResultDashboardContent(
     mode: RouteDashboardMode,
     onModeChange: (RouteDashboardMode) -> Unit,
     onOpenNauti: () -> Unit,
+    onOptimize: () -> Unit,
     onRefreshPassageWindow: () -> Unit,
     onNavigate: () -> Unit,
     onSave: () -> Unit,
@@ -188,6 +194,12 @@ fun RouteResultDashboardContent(
         ) {
             if (mode != RouteDashboardMode.COMPACT) {
                 RouteStatusHeader(uiState)
+                if (uiState.routeStatus == RouteStatus.NICHT_BEFAHRBAR || uiState.routeStatus == RouteStatus.EINGESCHRAENKT) {
+                    SafetyFailureSection(
+                        uiState = uiState,
+                        onOptimize = onOptimize
+                    )
+                }
             }
 
             NautiDashboardRow(
@@ -265,6 +277,51 @@ private fun DashboardDragHandle(
                 .clip(CircleShape)
                 .background(handleColor),
         )
+    }
+}
+
+@Composable
+private fun SafetyFailureSection(
+    uiState: RoutePlanningUiState,
+    onOptimize: () -> Unit,
+) {
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val bgColor = if (isDark) Color(0xFF451A1A).copy(alpha = 0.4f) else Color(0xFFFFEBEE).copy(alpha = 0.6f)
+    val textColor = if (isDark) Color(0xFFFFCDD2) else Color(0xFFC62828)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(bgColor)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Error, null, tint = textColor, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = uiState.failureReason.toDisplayString(),
+                color = textColor,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        Button(
+            onClick = onOptimize,
+            modifier = Modifier.fillMaxWidth().height(36.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = textColor.copy(alpha = 0.8f),
+                contentColor = Color.White
+            ),
+            shape = RoundedCornerShape(18.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+        ) {
+            Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Törn automatisch optimieren", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
@@ -397,14 +454,25 @@ private fun DashboardPassageRow(
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 17.sp,
             )
-            uiState.passageWindow?.bottleneckName?.let { name ->
-                Text(
-                    "Engstelle: $name",
-                    color = labelColor.copy(alpha = 0.8f),
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            uiState.passageWindow?.let { window ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Engstelle: ${window.bottleneckName ?: "Unbekannt"}",
+                        color = labelColor.copy(alpha = 0.8f),
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    window.anchoredHighWater?.let { hw ->
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            " (HW: ${hw.format(DateTimeFormatter.ofPattern("HH:mm"))})",
+                            color = labelColor.copy(alpha = 0.8f),
+                            fontSize = 11.sp,
+                        )
+                    }
+                }
             }
         }
         if (uiState.isSearchingPassageWindow) {
@@ -505,7 +573,26 @@ private fun DashboardMetrics(uiState: RoutePlanningUiState) {
             isLoading = isLoading,
             modifier = Modifier.weight(1f),
         )
-        Spacer(Modifier.weight(2f))
+        DashboardMetric(
+            label = "rwK (Mittel)",
+            value = metrics?.averageTrueCourseDegrees?.let {
+                String.format(Locale.GERMANY, "%03d°", it.roundToInt())
+            } ?: "–",
+            icon = Icons.Default.CompassCalibration,
+            isLoading = isLoading,
+            modifier = Modifier.weight(1f),
+        )
+        DashboardMetric(
+            label = "STRÖMUNG",
+            value = metrics?.let { m ->
+                if (m.averageCurrentSetDegrees != null && m.averageCurrentDriftKnots != null) {
+                    String.format(Locale.GERMANY, "%03d° / %.1f kn", m.averageCurrentSetDegrees.roundToInt(), m.averageCurrentDriftKnots)
+                } else "–"
+            } ?: "–",
+            icon = Icons.Default.Water, // Use Water icon instead of Air
+            isLoading = isLoading,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -661,5 +748,13 @@ private fun dashboardPassageText(uiState: RoutePlanningUiState): String {
     if (uiState.isSearchingPassageWindow) return "Wird berechnet…"
     val window = uiState.passageWindow ?: return "Kein Fenster gefunden"
     val formatter = DateTimeFormatter.ofPattern("HH:mm", Locale.GERMANY)
-    return "${window.start.format(formatter)} – ${window.end.format(formatter)} Uhr"
+
+    val dep = uiState.departure
+    return if (window.contains(dep)) {
+        // Wenn wir zum gewählten Zeitpunkt bereits im Fenster sind,
+        // zeigen wir an, wie lange es noch offen ist.
+        "Noch offen bis ${window.end.format(formatter)} Uhr"
+    } else {
+        "${window.start.format(formatter)} – ${window.end.format(formatter)} Uhr"
+    }
 }

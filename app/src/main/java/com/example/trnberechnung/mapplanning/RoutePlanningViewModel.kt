@@ -21,6 +21,7 @@ class RoutePlanningViewModel(
         IncompleteRouteAssessmentProvider,
     private val metricRouteResolver: FairwayRouteResolver? = null,
     private val passageWindowScanner: PassageWindowScanner = PassageWindowScanner(),
+    private val currentVectorProvider: CurrentVectorProvider? = null,
     clock: Clock = Clock.systemUTC(),
 ) : ViewModel() {
     private val _uiState =
@@ -36,6 +37,7 @@ class RoutePlanningViewModel(
     val uiState: StateFlow<RoutePlanningUiState> = _uiState.asStateFlow()
 
     private var calculationJob: Job? = null
+    private var debounceJob: Job? = null
     private var calculationGeneration = 0L
 
     fun selectStart(harbourId: HarbourId?) {
@@ -118,11 +120,18 @@ class RoutePlanningViewModel(
         }
     }
 
-    fun updateDeparture(departure: ZonedDateTime) {
+    fun updateDeparture(departure: ZonedDateTime, triggerCalculation: Boolean = true) {
         val normalized = departure.withZoneSameInstant(MAP_PLANNING_ZONE_ID)
         if (_uiState.value.departure == normalized) return
         _uiState.update { it.copy(departure = normalized) }
-        routeInputChanged()
+
+        if (triggerCalculation) {
+            debounceJob?.cancel()
+            debounceJob = viewModelScope.launch {
+                kotlinx.coroutines.delay(150)
+                routeInputChanged()
+            }
+        }
     }
 
     fun updateBoatSettings(
@@ -182,11 +191,35 @@ class RoutePlanningViewModel(
                             request = request,
                             routeGeometry = snapshot.routeGeometry,
                             distanceNm = metrics.distanceNm,
+                            averageTrueCourse = metrics.averageTrueCourseDegrees ?: 0.0
                         )
+
+                    val currentWindow = windows.find { it.contains(request.departure) }
+                        ?: windows.filter { it.start.isAfter(request.departure) }.minByOrNull { it.start }
+                        ?: windows.firstOrNull()
+
+                    val finalAssessment = assessWithWindow(request, snapshot.routeGeometry, metrics, currentWindow)
+                    val tidalEval = UnderKeelSafetyEvaluator.evaluate(
+                        finalAssessment.clearanceSamples,
+                        request.boatSettings.safetyMarginMeters,
+                        finalAssessment.allLegsValid
+                    )
+                    val combinedStatus = RouteStatusEvaluator.combine(
+                        tidalEval.status,
+                        finalAssessment.weatherStatus
+                    )
+
                     updateForGeneration(generation) {
                         it.copy(
                             passageWindows = windows,
                             isSearchingPassageWindow = false,
+                            routeStatus = combinedStatus,
+                            tidalStatus = tidalEval.status,
+                            failureReason = tidalEval.reason,
+                            routeMetrics = metrics.copy(
+                                worstUnderKeelClearanceMeters = finalAssessment.worstClearanceMeters,
+                                worstClearanceName = finalAssessment.worstClearanceSample?.waypointName
+                            )
                         )
                     }
                 } catch (cancellation: CancellationException) {
@@ -200,6 +233,57 @@ class RoutePlanningViewModel(
                     }
                 }
             }
+    }
+
+    fun optimizeTörn() {
+        val windows = _uiState.value.passageWindows
+        if (windows.isEmpty()) {
+            // Wenn kein Fenster da ist, versuchen wir zumindest die Abfahrt auf HW der Engstelle zu legen
+            _uiState.value.routeMetrics?.worstHighWater?.let { hw ->
+                // Wir ziehen die halbe Reisezeit ab, um etwa bei HW an der Engstelle zu sein
+                val travelTime = _uiState.value.routeMetrics?.travelTime ?: java.time.Duration.ZERO
+                updateDeparture(hw.minus(travelTime.dividedBy(2)))
+            }
+            return
+        }
+
+        // Finde das nächste Fenster ab jetzt oder ab gewählter Zeit
+        val now = _uiState.value.departure
+        val bestWindow = windows.find { it.contains(now) }
+            ?: windows.filter { it.start.isAfter(now) }.minByOrNull { it.start }
+            ?: windows.firstOrNull()
+
+        bestWindow?.let {
+            updateDeparture(it.start.plusMinutes(5)) // Kleiner Puffer zum Fensterstart
+        }
+    }
+
+    private suspend fun assessWithWindow(
+        request: RoutePlanningRequest,
+        geometry: List<GeoPoint>,
+        metrics: RouteMetrics,
+        window: PassageWindow?,
+    ): RouteSafetyAssessment {
+        val assessment = routeAssessmentProvider.assess(
+            RouteAssessmentInput(request, geometry, metrics, currentProvider = currentVectorProvider)
+        )
+
+        // Falls wir ein berechnetes Fenster haben, geben wir es an den Evaluator weiter,
+        // damit dieser prüfen kann, ob die Ankunft außerhalb des sicheren Fensters liegt.
+        val enrichedSamples = assessment.clearanceSamples.mapIndexed { index, sample ->
+            if (index == assessment.clearanceSamples.lastIndex) {
+                sample.copy(safeWindowEnd = window?.end)
+            } else sample
+        }
+
+        val safetyMargin = request.boatSettings.safetyMarginMeters
+        val bottleneck = enrichedSamples.filter { it.clearanceMeters != null }
+            .minByOrNull { it.clearanceMeters!! - safetyMargin }
+
+        return assessment.copy(
+            clearanceSamples = enrichedSamples,
+            criticalSample = bottleneck
+        )
     }
 
     private fun routeInputChanged() {
@@ -311,22 +395,12 @@ class RoutePlanningViewModel(
                 null -> routeGeometry
                 is FairwayRouteResult.Success ->
                     fairwayResult.waypoints.map(RouteSafetyWaypoint::coordinate)
+
                 is FairwayRouteResult.Incomplete -> {
-                    updateForGeneration(generation) {
-                        it.copy(
-                            routeGeometry = routeGeometry,
-                            routeStatus = RouteStatus.UNVOLLSTAENDIG,
-                            tidalStatus = RouteStatus.UNVOLLSTAENDIG,
-                            weatherStatus = WeatherStatus.UNVOLLSTAENDIG,
-                            routeMetrics = null,
-                            passageWindows = emptyList(),
-                            isCalculating = false,
-                            isSearchingPassageWindow = false,
-                            messages = listOf(fairwayResult.reason),
-                            error = fairwayResult.reason,
-                        )
-                    }
-                    return
+                    // FALLBACK: Wenn die Fahrwasser-Optimierung fehlschlägt, nutzen wir die Rohgeometrie.
+                    // So wird für jede gewählte Route (z.B. Borkum, Spiekeroog) ein Ergebnis berechnet.
+                    android.util.Log.w("RoutePlanning", "Fahrwasser-Optimierung unvollständig: ${fairwayResult.reason}")
+                    routeGeometry
                 }
             }
         val initialMetrics = withContext(Dispatchers.Default) {
@@ -334,6 +408,7 @@ class RoutePlanningViewModel(
                 routeGeometry = metricGeometry,
                 departure = request.departure,
                 boatSettings = request.boatSettings,
+                currentProvider = currentVectorProvider
             )
         }
         if (initialMetrics == null) {
@@ -356,18 +431,23 @@ class RoutePlanningViewModel(
                     routeGeometry = routeGeometry,
                     routeMetrics = initialMetrics,
                     isScan = false,
+                    currentProvider = currentVectorProvider
                 ),
             )
         }
+        android.util.Log.d("RoutePlanning", "Assessment abgeschlossen: ${assessment.clearanceSamples.size} Samples, allLegsValid=${assessment.allLegsValid}")
+
         val hasExpectedSamples =
             assessment.clearanceSamples.size == assessment.expectedWaypointCount
-        val tidalStatus =
+        val tidalEval =
             UnderKeelSafetyEvaluator.evaluate(
                 samples = assessment.clearanceSamples,
                 safetyMarginMeters = request.boatSettings.safetyMarginMeters,
                 allLegsValid = assessment.allLegsValid && hasExpectedSamples,
             )
-        val routeStatus = RouteStatusEvaluator.combine(tidalStatus, assessment.weatherStatus)
+        val routeStatus = RouteStatusEvaluator.combine(tidalEval.status, assessment.weatherStatus)
+        android.util.Log.d("RoutePlanning", "Status berechnet: tidal=${tidalEval.status}, route=$routeStatus, worstClearance=${assessment.worstClearanceMeters}")
+
         val metrics =
             initialMetrics.copy(
                 worstUnderKeelClearanceMeters = assessment.worstClearanceMeters,
@@ -378,8 +458,9 @@ class RoutePlanningViewModel(
             it.copy(
                 routeGeometry = routeGeometry,
                 routeStatus = routeStatus,
-                tidalStatus = tidalStatus,
+                tidalStatus = tidalEval.status,
                 weatherStatus = assessment.weatherStatus,
+                failureReason = tidalEval.reason,
                 routeMetrics = metrics,
                 passageWindows = emptyList(),
                 isCalculating = false,
@@ -394,22 +475,35 @@ class RoutePlanningViewModel(
                 request = request,
                 routeGeometry = routeGeometry,
                 distanceNm = metrics.distanceNm,
+                averageTrueCourse = metrics.averageTrueCourseDegrees ?: 0.0
             )
         }
 
-        // WICHTIG: Wenn die aktuelle Abfahrt NICHT im ersten gefundenen Fenster liegt,
-        // passen wir die Abfahrt und damit die Ankunft automatisch an den Fensterstart an.
-        val firstSafeWindow = passageWindows.firstOrNull()
-        if (firstSafeWindow != null && !firstSafeWindow.contains(request.departure)) {
-             android.util.Log.d("RoutePlanning", "Verschiebe Abfahrt von ${request.departure} auf Fensterstart ${firstSafeWindow.start}")
-             updateDeparture(firstSafeWindow.start)
-             return // updateDeparture triggert eine neue Berechnung, wir können hier abbrechen
-        }
+        // Nach der Fensterberechnung evaluieren wir den Status erneut,
+        // um das Zeitfenster (Ankunft nach Fenster-Ende) zu berücksichtigen.
+        val currentWindow = passageWindows.find { it.contains(request.departure) }
+            ?: passageWindows.filter { it.start.isAfter(request.departure) }.minByOrNull { it.start }
+            ?: passageWindows.firstOrNull()
+
+        val finalAssessment = assessWithWindow(request, routeGeometry, metrics, currentWindow)
+        val finalTidalEval = UnderKeelSafetyEvaluator.evaluate(
+            samples = finalAssessment.clearanceSamples,
+            safetyMarginMeters = request.boatSettings.safetyMarginMeters,
+            allLegsValid = assessment.allLegsValid && hasExpectedSamples,
+        )
+        val finalRouteStatus = RouteStatusEvaluator.combine(finalTidalEval.status, finalAssessment.weatherStatus)
 
         updateForGeneration(generation) {
             it.copy(
                 passageWindows = passageWindows,
                 isSearchingPassageWindow = false,
+                routeStatus = finalRouteStatus,
+                tidalStatus = finalTidalEval.status,
+                failureReason = finalTidalEval.reason,
+                routeMetrics = metrics.copy(
+                    worstUnderKeelClearanceMeters = finalAssessment.worstClearanceMeters,
+                    worstClearanceName = finalAssessment.bottleneckSample?.waypointName
+                )
             )
         }
     }
@@ -418,18 +512,22 @@ class RoutePlanningViewModel(
         request: RoutePlanningRequest,
         routeGeometry: List<GeoPoint>,
         distanceNm: Double,
-    ): List<PassageWindow> =
-        passageWindowScanner.findSafeWindows(
+        averageTrueCourse: Double,
+    ): List<PassageWindow> {
+        return passageWindowScanner.findSafeWindows(
             center = request.departure,
             evaluator =
                 PassageCandidateEvaluator { candidateDeparture ->
                     val shiftedRequest = request.copy(departure = candidateDeparture)
-                    val shiftedMetrics =
-                        RouteMetricsCalculator.fromDistance(
-                            distanceNm = distanceNm,
-                            departure = candidateDeparture,
-                            boatSettings = request.boatSettings,
-                        )
+                    // WICHTIG: Wir nutzen eine rein distanzbasierte Metrik ohne dynamische Faktoren,
+                    // um die Konsistenz des Fensters zu wahren.
+                    val shiftedMetrics = RouteMetricsCalculator.fromDistance(
+                        distanceNm = distanceNm,
+                        departure = candidateDeparture,
+                        boatSettings = request.boatSettings,
+                        averageTrueCourse = averageTrueCourse
+                    )
+
                     val assessment =
                         routeAssessmentProvider.assess(
                             RouteAssessmentInput(
@@ -437,6 +535,7 @@ class RoutePlanningViewModel(
                                 routeGeometry = routeGeometry,
                                 routeMetrics = shiftedMetrics,
                                 isScan = true,
+                                currentProvider = currentVectorProvider
                             ),
                         )
                     PassageCandidateAssessment(
@@ -444,9 +543,11 @@ class RoutePlanningViewModel(
                         waypointClearances = assessment.clearanceSamples,
                         allLegsValid = assessment.allLegsValid,
                         safetyMarginMeters = request.boatSettings.safetyMarginMeters,
+                        weatherStatus = assessment.weatherStatus
                     )
                 },
         )
+    }
 
     private inline fun updateForGeneration(
         generation: Long,

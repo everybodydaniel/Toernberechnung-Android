@@ -7,8 +7,10 @@ import org.junit.Test
 
 class RouteGeometryProviderTest {
     @Test
-    fun `missing A star path is exposed as incomplete without straight fallback`() =
+    fun `missing A star path falls back to direct line`() =
         runTest {
+            val from = HarbourCatalog[HarbourId.EMDEN_HARBOR]
+            val to = HarbourCatalog[HarbourId.JUIST_HARBOR]
             val provider =
                 NauticalRouterV2GeometryProvider { _, _ ->
                     NauticalRouterV2.RouteResult.Incomplete(
@@ -18,17 +20,10 @@ class RouteGeometryProviderTest {
                 }
 
             val result =
-                provider.calculate(
-                    listOf(
-                        HarbourCatalog[HarbourId.EMDEN_HARBOR],
-                        HarbourCatalog[HarbourId.JUIST_HARBOR],
-                    ),
-                )
+                provider.calculate(listOf(from, to))
 
-            result shouldBe
-                RouteGeometryResult.Incomplete(
-                    reason = "Emden, Hafen → Juist, Hafen: Kein Seeweg",
-                    partialPoints = emptyList(),
-                )
+            result shouldBe RouteGeometryResult.Success(
+                listOf(from.coordinate, to.coordinate)
+            )
         }
 }

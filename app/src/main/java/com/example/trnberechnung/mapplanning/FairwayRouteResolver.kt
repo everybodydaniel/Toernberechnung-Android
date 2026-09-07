@@ -9,6 +9,7 @@ data class RouteSafetyWaypoint(
     val coordinate: GeoPoint,
     val chartDepthMeters: Double?,
     val harbourId: HarbourId? = null,
+    val isSeegat: Boolean = false,
 ) {
     val isUserWaypoint: Boolean
         get() = harbourId != null
@@ -69,6 +70,7 @@ object CatalogFairwayRouteResolver : FairwayRouteResolver {
                                     name = waypoint.id,
                                     coordinate = GeoPoint(waypoint.lat, waypoint.lon),
                                     chartDepthMeters = waypoint.chartDepth,
+                                    isSeegat = waypoint.isSeegat
                                 )
                         }
                     expanded += to.toSafetyWaypoint()

@@ -9,8 +9,7 @@ import org.maplibre.android.geometry.LatLng
 /**
  * Lädt zusätzliche Fahrwasser- und Schutzzonen-Geometrien aus
  * GeoJSON-Dateien in `app/src/main/assets/fairways/` (Endung `.geojson`)
- * und stellt sie [NauticalRouter] und [com.example.trnberechnung.routing.SeaRouteCalculator]
- * zur Verfügung.
+ * und stellt sie [NauticalRouter] zur Verfügung.
  *
  * # Erwartetes GeoJSON-Schema
  *
@@ -32,9 +31,8 @@ import org.maplibre.android.geometry.LatLng
  *     - `zone` (String) — z.B. `"nationalpark_zone_1"`, `"vogelschutzgebiet"`
  *     - `name` (String, optional)
  *
- *     Wird als `List<LatLng>` in [protectedZones] aufgenommen.
- *     [com.example.trnberechnung.routing.SeaRouteCalculator] rastert
- *     diese Polygone wie Land (Cost = unendlich).
+ *     Wird als `List<LatLng>` in [protectedZones] aufgenommen, damit eine
+ *     aufrufende Routenkomponente diese Sperrflächen berücksichtigen kann.
  *
  * # Lebenszyklus
  *
