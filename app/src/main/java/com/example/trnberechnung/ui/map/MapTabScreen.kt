@@ -87,6 +87,10 @@ fun MapTabScreen(
     bottomOverlayClearance: Dp,
     onOpenWeather: () -> Unit,
     onOpenNavigation: () -> Unit,
+    warningOverlays: List<MapWarningOverlay> = emptyList(),
+    focusedWarningId: String? = null,
+    onWarningFocusConsumed: (String) -> Unit = {},
+    onOpenWarning: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val activity = context.findActivity()
@@ -288,10 +292,15 @@ fun MapTabScreen(
             route = routeState.routeGeometry.map { LatLng(it.latitude, it.longitude) },
             routeColor = routeState.mapRouteColor(),
             harbours = routeState.mapHarbourMarkers(),
+            warningOverlays = warningOverlays,
+            focusedWarningId = focusedWarningId,
+            onWarningFocusConsumed = onWarningFocusConsumed,
+            warningSummaryBottomPadding = bottomOverlayClearance + 104.dp,
             modifier = Modifier.fillMaxSize(),
             // Only harbours that are already part of the plan carry a marker, so a tap can no
             // longer be a "pick this as start/destination" gesture - it opens the planner instead.
             onHarbourClick = { showPlanner = true },
+            onOpenWarning = onOpenWarning,
         )
 
         val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE

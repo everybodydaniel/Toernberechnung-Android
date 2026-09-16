@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,7 +39,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -79,12 +82,17 @@ import com.example.trnberechnung.ui.components.TideNodeInk
 import com.example.trnberechnung.ui.components.tideNodeAppHeaderHeight
 import com.example.trnberechnung.ui.components.tideNodeGlass
 import com.example.trnberechnung.ui.map.MapTabScreen
+import com.example.trnberechnung.ui.map.MapWarningCoordinate
+import com.example.trnberechnung.ui.map.MapWarningGeometryType
+import com.example.trnberechnung.ui.map.mapWarningOverlayOrNull
 import com.example.trnberechnung.ui.navigation.FullScreenNavigationScreen
 import com.example.trnberechnung.ui.theme.NauticalBackground
 import com.example.trnberechnung.viewmodel.CrewspaceViewModel
 import com.example.trnberechnung.viewmodel.CrewspaceViewModelFactory
 import com.example.trnberechnung.viewmodel.NautiViewModel
+import com.example.trnberechnung.viewmodel.NorthSeaWarningsViewModel
 import com.example.trnberechnung.viewmodel.TideViewModel
+import com.example.trnberechnung.warnings.WarningGeometryType
 
 sealed class Screen(
     val route: String,
@@ -100,6 +108,8 @@ sealed class Screen(
     data object Logbook : Screen("logbook", "Logbuch", Icons.AutoMirrored.Filled.MenuBook)
 
     data object Settings : Screen("settings", "Einstellungen", Icons.Default.Map)
+
+    data object Warnings : Screen("north_sea_warnings", "Nordsee-Warnmeldungen", Icons.Default.Notifications)
 
     data object Navigation : Screen("navigation", "Navigation", Icons.Default.Map)
 }
@@ -145,6 +155,41 @@ fun MainAppScreen(
                     )
                 },
         )
+    val warningsViewModel: NorthSeaWarningsViewModel =
+        viewModel(
+            factory =
+                remember(application) {
+                    NorthSeaWarningsViewModel.Factory(application.northSeaWarningRepository)
+                },
+        )
+    val warningsState by warningsViewModel.uiState.collectAsState()
+    val unseenWarningCount by application.northSeaWarningRepository.unseenCount.collectAsState(initial = 0)
+    var focusedWarningId by remember { mutableStateOf<String?>(null) }
+    val warningOverlays =
+        remember(warningsState.warnings) {
+            warningsState.warnings.mapNotNull { warning ->
+                val geometry = warning.geometry ?: return@mapNotNull null
+                mapWarningOverlayOrNull(
+                    id = warning.id,
+                    title = warning.title,
+                    summary = warning.summary(),
+                    geometryType =
+                        when (geometry.type) {
+                            WarningGeometryType.POINT -> MapWarningGeometryType.POINT
+                            WarningGeometryType.MULTI_POINT -> MapWarningGeometryType.MULTI_POINT
+                            WarningGeometryType.LINE -> MapWarningGeometryType.LINE
+                            WarningGeometryType.POLYGON -> MapWarningGeometryType.AREA
+                        },
+                    coordinates =
+                        geometry.coordinates.map { coordinate ->
+                            MapWarningCoordinate(
+                                latitude = coordinate.latitude,
+                                longitude = coordinate.longitude,
+                            )
+                        },
+                )
+            }
+        }
     val routePlanningViewModel: RoutePlanningViewModel =
         viewModel(
             factory =
@@ -252,6 +297,20 @@ fun MainAppScreen(
                             launchSingleTop = true
                         }
                     },
+                    warningOverlays = warningOverlays,
+                    focusedWarningId = focusedWarningId,
+                    onWarningFocusConsumed = { warningId ->
+                        if (focusedWarningId == warningId) {
+                            focusedWarningId = null
+                        }
+                    },
+                    onOpenWarning = { warningId ->
+                        if (focusedWarningId == warningId) {
+                            focusedWarningId = null
+                        }
+                        warningsViewModel.showWarning(warningId)
+                        navController.navigate(Screen.Warnings.route) { launchSingleTop = true }
+                    },
                 )
             }
             composable(Screen.Revier.route) {
@@ -292,6 +351,25 @@ fun MainAppScreen(
                     )
                 }
             }
+            composable(Screen.Warnings.route) {
+                SettingsDestination(
+                    onBack = navController::popBackStack,
+                    backButtonTestTag = "warnings_back",
+                ) {
+                    NorthSeaWarningsScreen(
+                        viewModel = warningsViewModel,
+                        onShowOnMap = { warning ->
+                            if (warningOverlays.any { it.id == warning.id }) {
+                                // Publish the focus request before closing this destination so the
+                                // existing map receives the selected official geometry on entry.
+                                focusedWarningId = warning.id
+                                navController.popBackStack()
+                                navController.navigateMainTab(Screen.MapRoute.route)
+                            }
+                        },
+                    )
+                }
+            }
             composable(Screen.Navigation.route) {
                 if (activeVoyageState !is ActiveVoyageState.Active) {
                     LaunchedEffect(Unit) {
@@ -315,6 +393,11 @@ fun MainAppScreen(
 
         if (isMainTab) {
             TideNodeAppHeader(
+                onWarnings = {
+                    focusedWarningId = null
+                    warningsViewModel.clearRevealRequest()
+                    navController.navigate(Screen.Warnings.route) { launchSingleTop = true }
+                },
                 onSettings = {
                     navController.navigate(Screen.Settings.route) { launchSingleTop = true }
                 },
@@ -322,6 +405,7 @@ fun MainAppScreen(
                 // nautical chart and the blue gradient - so the wordmark goes white there.
                 onColoredBackground =
                     currentRoute == Screen.MapRoute.route || currentRoute == Screen.Revier.route,
+                hasNewWarnings = shouldShowWarningBadge(unseenWarningCount),
                 modifier =
                     Modifier
                         .align(Alignment.TopCenter)
@@ -430,6 +514,7 @@ private fun MainTabContent(
 @Composable
 private fun SettingsDestination(
     onBack: () -> Unit,
+    backButtonTestTag: String = "settings_back",
     content: @Composable () -> Unit,
 ) {
     val adaptiveLayout = currentAdaptiveLayout()
@@ -482,7 +567,7 @@ private fun SettingsDestination(
                             Modifier.padding(start = 16.dp, top = topInset + 8.dp)
                         },
                     )
-                    .testTag("settings_back"),
+                    .testTag(backButtonTestTag),
         )
     }
 }

@@ -21,6 +21,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.trnberechnung.model.OnboardingPreferences
+import com.example.trnberechnung.navigation.ActiveVoyageState
 import com.example.trnberechnung.repository.TideRepository
 import com.example.trnberechnung.routing.v2.SeaMask
 import com.example.trnberechnung.ui.MainAppScreen
@@ -111,14 +112,18 @@ class MainActivity : ComponentActivity() {
                 } else {
                     val viewModel: TideViewModel = viewModel(factory = factory)
 
-                    // Weather, tides and BSH data keep themselves current: reloaded on every
-                    // return to the foreground and then every WEATHER_REFRESH_INTERVAL_MILLIS
-                    // while visible. Bound to RESUMED on purpose - nothing polls in the
-                    // background. This replaces the manual refresh button that used to sit in
-                    // the app header.
+                    // Weather and tides keep themselves current while visible. Warnings refresh
+                    // once per foreground entry, never periodically and never during an active
+                    // voyage. All work is bound to RESUMED; no warning polling runs in background.
                     val lifecycleOwner = LocalLifecycleOwner.current
                     LaunchedEffect(viewModel, lifecycleOwner) {
                         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                            tideNodeApplication.activeVoyageManager.restoreActiveVoyage()
+                            if (tideNodeApplication.activeVoyageManager.state.value !is ActiveVoyageState.Active) {
+                                launch {
+                                    tideNodeApplication.northSeaWarningRepository.refresh()
+                                }
+                            }
                             while (true) {
                                 viewModel.loadData()
                                 delay(WEATHER_REFRESH_INTERVAL_MILLIS)

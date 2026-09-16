@@ -71,6 +71,17 @@ class FullAppUiTest {
 
         composeTestRule.onNodeWithTag("nav_map_route").assertIsSelected()
         composeTestRule.onAllNodesWithTag("global_app_header").assertCountEquals(1)
+
+        // The bell opens the warning overview directly and the secondary back
+        // action returns to the previously selected main tab.
+        composeTestRule.onNodeWithTag("app_header_warnings").assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithTag("north_sea_warnings_screen").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Nordsee-Warnmeldungen").assertIsDisplayed()
+        composeTestRule.onAllNodesWithTag("global_app_header").assertCountEquals(0)
+        composeTestRule.onNodeWithTag("warnings_back").performClick()
+        composeTestRule.onNodeWithTag("nav_map_route").assertIsSelected()
+        composeTestRule.onAllNodesWithTag("global_app_header").assertCountEquals(1)
+
         composeTestRule.onNodeWithTag("full_bleed_map_tab").assertIsDisplayed()
         composeTestRule.waitUntil(timeoutMillis = 15_000) {
             composeTestRule
@@ -120,8 +131,20 @@ class FullAppUiTest {
         // Settings opens directly; there is no intermediate menu.
         composeTestRule.onNodeWithTag("app_header_settings").performClick()
         composeTestRule.onNodeWithTag("boat_name_input").assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText("Gezeiten, Hoch- und Niedrigwasser sowie nautische Warnnachrichten")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText("WSV / ELWIS")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Bekanntmachungen für Seefahrer").assertIsDisplayed()
         val newBoatName = "Flying Dutchman"
-        composeTestRule.onNodeWithTag("boat_name_input").performTextReplacement(newBoatName)
+        composeTestRule
+            .onNodeWithTag("boat_name_input")
+            .performScrollTo()
+            .performTextReplacement(newBoatName)
         composeTestRule.onNodeWithTag("boat_name_headline").assertTextEquals(newBoatName)
         composeTestRule.onNodeWithTag("settings_back").performClick()
         composeTestRule.onNodeWithTag("nav_map_route").assertIsSelected()
@@ -135,6 +158,27 @@ class FullAppUiTest {
                 .performClick()
             composeTestRule.waitForIdle()
         }
+        composeTestRule.onNodeWithTag("onboarding_warnings_illustration").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Gefahren und Sperrungen").assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText("SEEFAHRER-MELDUNGEN")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText("Meldungen lesen.\nInformiert ablegen.")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(
+                "Informieren Sie sich über Sperrungen, Gefahren und veränderte Seezeichen in " +
+                    "der Nordsee. Öffnen Sie verortete Meldungen direkt auf der Karte.",
+            )
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag("onboarding_continue")
+            .assertIsEnabled()
+            .performClick()
+        composeTestRule.waitForIdle()
         // The crew page no longer advertises a chat that is not coming: the tile reads "Crew" and
         // carries no release badge.
         composeTestRule.onNodeWithText("FULL RELEASE").assertDoesNotExist()

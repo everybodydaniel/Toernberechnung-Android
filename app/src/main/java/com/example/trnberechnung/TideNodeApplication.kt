@@ -11,7 +11,10 @@ import com.example.trnberechnung.navigation.VoyageServiceDependencies
 import com.example.trnberechnung.navigation.VoyageServiceHost
 import com.example.trnberechnung.repository.ActiveVoyageRepository
 import com.example.trnberechnung.repository.NautiConversationRepository
+import com.example.trnberechnung.repository.NorthSeaWarningRepository
 import com.example.trnberechnung.repository.RoomActiveVoyagePersistence
+import com.example.trnberechnung.warnings.BshWarningSource
+import com.example.trnberechnung.warnings.ElwisWarningSource
 import java.util.UUID
 
 class TideNodeApplication :
@@ -24,8 +27,9 @@ class TideNodeApplication :
                 AppDatabase::class.java,
                 "tide_database",
             )
-            // No migration path on purpose: removing Crewspace dropped the chat tables and the app
-            // has never been published, so an existing install simply gets a fresh database.
+            .addMigrations(AppDatabase.MIGRATION_15_16)
+            // Preserve warning data from version 15 onward. Unsupported older development schemas
+            // still use the existing destructive fallback because the app has not been published.
             .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
     }
@@ -38,6 +42,13 @@ class TideNodeApplication :
 
     val activeVoyageRepository: ActiveVoyageRepository by lazy {
         ActiveVoyageRepository(database.activeVoyageDao(), ::localDataOwnerId)
+    }
+
+    val northSeaWarningRepository: NorthSeaWarningRepository by lazy {
+        NorthSeaWarningRepository(
+            database = database,
+            adapters = listOf(BshWarningSource(), ElwisWarningSource()),
+        )
     }
 
     val roomActiveVoyagePersistence: RoomActiveVoyagePersistence by lazy {

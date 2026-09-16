@@ -556,7 +556,13 @@ fun DashboardScreen(
             DataSourceRow(
                 icon = Icons.Default.Water,
                 title = "BSH",
-                subtitle = "Gezeiten, Hoch- und Niedrigwasser",
+                subtitle = "Gezeiten, Hoch- und Niedrigwasser sowie nautische Warnnachrichten",
+            )
+            Spacer(Modifier.height(8.dp))
+            DataSourceRow(
+                icon = Icons.Default.CellTower,
+                title = "WSV / ELWIS",
+                subtitle = "Bekanntmachungen für Seefahrer",
             )
             Spacer(Modifier.height(8.dp))
             DataSourceRow(
@@ -839,7 +845,7 @@ private fun DataSourceRow(
     ) {
         IconBadge(icon)
         Spacer(Modifier.width(12.dp))
-        Column {
+        Column(Modifier.weight(1f)) {
             Text(
                 title,
                 fontWeight = FontWeight.ExtraBold,

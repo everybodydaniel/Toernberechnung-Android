@@ -6,12 +6,20 @@ import android.util.Log
 import android.view.Gravity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -25,12 +33,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.gson.JsonPrimitive
 import kotlinx.coroutines.delay
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -41,6 +53,8 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.plugins.annotation.CircleManager
 import org.maplibre.android.plugins.annotation.CircleOptions
+import org.maplibre.android.plugins.annotation.FillManager
+import org.maplibre.android.plugins.annotation.FillOptions
 import org.maplibre.android.plugins.annotation.LineManager
 import org.maplibre.android.plugins.annotation.LineOptions
 import org.maplibre.android.plugins.annotation.SymbolManager
@@ -68,6 +82,7 @@ data class MapHarbourMarker(
 
 private class FullBleedMapState {
     var map: MapLibreMap? = null
+    var fills: FillManager? = null
     var circles: CircleManager? = null
     var lines: LineManager? = null
     var symbols: SymbolManager? = null
@@ -129,6 +144,10 @@ private enum class MapLoadStatus {
 private const val FULL_BLEED_MAP_TAG = "FullBleedMap"
 private const val MAP_START_TIMEOUT_MILLIS = 8_000L
 private const val MAP_FALLBACK_TIMEOUT_MILLIS = 2_500L
+private const val HARBOUR_DATA_PREFIX = "harbour:"
+private const val WARNING_DATA_PREFIX = "warning:"
+private val mapWarningRed = Color(0xFFDC2626)
+private val mapWarningDarkRed = Color(0xFF991B1B)
 
 @Composable
 fun FullBleedMap(
@@ -141,8 +160,13 @@ fun FullBleedMap(
     headingDegrees: Double? = null,
     followLocation: Boolean = false,
     attributionTopMargin: Dp = 184.dp,
+    warningOverlays: List<MapWarningOverlay> = emptyList(),
+    focusedWarningId: String? = null,
+    warningSummaryBottomPadding: Dp = 24.dp,
     onHarbourClick: (String) -> Unit = {},
     onMapClick: (LatLng) -> Unit = {},
+    onWarningFocusConsumed: (String) -> Unit = {},
+    onOpenWarning: (String) -> Unit = {},
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val state = remember { FullBleedMapState() }
@@ -151,8 +175,26 @@ fun FullBleedMap(
     var mapNotice by remember { mutableStateOf<String?>(null) }
     var mapLoading by remember { mutableStateOf(true) }
     var mapLoadStatus by remember { mutableStateOf(MapLoadStatus.STARTING) }
+    var selectedWarningId by remember { mutableStateOf<String?>(null) }
+    val renderableWarnings = remember(warningOverlays) { validatedMapWarningOverlays(warningOverlays) }
+    val focusedWarningAction =
+        remember(renderableWarnings, focusedWarningId) {
+            mapWarningFocusActionOrNull(renderableWarnings, focusedWarningId)
+        }
+    val selectedWarning =
+        mapWarningFocusActionOrNull(renderableWarnings, selectedWarningId)?.overlay
     val currentOnHarbourClick by rememberUpdatedState(onHarbourClick)
     val currentOnMapClick by rememberUpdatedState(onMapClick)
+    val currentWarningOverlays by rememberUpdatedState(renderableWarnings)
+    val currentOnWarningFocusConsumed by rememberUpdatedState(onWarningFocusConsumed)
+    val currentOnOpenWarning by rememberUpdatedState(onOpenWarning)
+    var warningFocusGate by remember { mutableStateOf(MapWarningFocusGate()) }
+
+    fun selectWarning(warningId: String): Boolean {
+        val action = mapWarningFocusActionOrNull(currentWarningOverlays, warningId) ?: return false
+        selectedWarningId = action.overlay.id
+        return true
+    }
 
     // Construct the MapView from AndroidView's Context. A LifecycleOwner is
     // deliberately not assumed to also be a Context.
@@ -214,7 +256,7 @@ fun FullBleedMap(
 
                         map.addOnMapClickListener {
                             currentOnMapClick(it)
-                            true
+                            false
                         }
 
                         fun loadStyle(
@@ -234,9 +276,11 @@ fun FullBleedMap(
                                         return@setStyle
                                     }
                                     try {
+                                        state.fills?.deleteAll()
                                         state.circles?.deleteAll()
                                         state.lines?.deleteAll()
                                         state.symbols?.deleteAll()
+                                        state.fills = FillManager(view, map, style)
                                         state.circles = CircleManager(view, map, style)
                                         state.lines = LineManager(view, map, style)
                                         state.symbols =
@@ -244,15 +288,37 @@ fun FullBleedMap(
                                                 iconAllowOverlap = true
                                                 textAllowOverlap = true
                                             }
+                                        state.fills?.addClickListener { fill ->
+                                            warningIdFromMapAnnotation(
+                                                runCatching { fill.data?.asString.orEmpty() }
+                                                    .getOrDefault(""),
+                                            )?.let(::selectWarning) ?: false
+                                        }
+                                        state.lines?.addClickListener { line ->
+                                            warningIdFromMapAnnotation(
+                                                runCatching { line.data?.asString.orEmpty() }
+                                                    .getOrDefault(""),
+                                            )?.let(::selectWarning) ?: false
+                                        }
+                                        state.circles?.addClickListener { circle ->
+                                            warningIdFromMapAnnotation(
+                                                runCatching { circle.data?.asString.orEmpty() }
+                                                    .getOrDefault(""),
+                                            )?.let(::selectWarning) ?: false
+                                        }
                                         state.symbols?.addClickListener { symbol ->
                                             val raw =
                                                 runCatching { symbol.data?.asString.orEmpty() }
                                                     .getOrDefault("")
-                                            if (raw.startsWith("harbour:")) {
-                                                currentOnHarbourClick(raw.removePrefix("harbour:"))
-                                                true
-                                            } else {
-                                                false
+                                            when {
+                                                raw.startsWith(HARBOUR_DATA_PREFIX) -> {
+                                                    currentOnHarbourClick(raw.removePrefix(HARBOUR_DATA_PREFIX))
+                                                    true
+                                                }
+                                                else ->
+                                                    warningIdFromMapAnnotation(raw)
+                                                        ?.let(::selectWarning)
+                                                        ?: false
                                             }
                                         }
                                         // MapView keeps an opaque loading foreground until it
@@ -327,13 +393,19 @@ fun FullBleedMap(
             onRelease = { view ->
                 state.destroyed = true
                 runCatching {
+                    state.fills?.deleteAll()
                     state.symbols?.deleteAll()
                     state.lines?.deleteAll()
                     state.circles?.deleteAll()
+                    state.fills?.onDestroy()
+                    state.symbols?.onDestroy()
+                    state.lines?.onDestroy()
+                    state.circles?.onDestroy()
                     state.stop(view)
                     view.onDestroy()
                 }
                 state.map = null
+                state.fills = null
                 state.symbols = null
                 state.lines = null
                 state.circles = null
@@ -365,6 +437,22 @@ fun FullBleedMap(
                     Modifier
                         .fillMaxSize()
                         .testTag("maplibre_surface_ready"),
+            )
+        }
+        if (renderableWarnings.isNotEmpty()) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .testTag("map_warning_overlays"),
+            )
+        }
+        if (focusedWarningAction != null) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .testTag("map_warning_focus"),
             )
         }
         mapNotice?.let { notice ->
@@ -406,6 +494,73 @@ fun FullBleedMap(
                         .testTag("maplibre_error_fallback"),
             )
         }
+        selectedWarning?.let { warning ->
+            Surface(
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = warningSummaryBottomPadding,
+                        )
+                        .fillMaxWidth()
+                        .widthIn(max = 520.dp)
+                        .testTag("map_warning_summary"),
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                shadowElevation = 10.dp,
+            ) {
+                Column(Modifier.padding(start = 18.dp, top = 14.dp, end = 12.dp, bottom = 8.dp)) {
+                    Text(
+                        text = "WARNMELDUNG",
+                        color = mapWarningRed,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+                    Text(
+                        text = warning.title,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (warning.summary.isNotEmpty()) {
+                        Text(
+                            text = warning.summary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(
+                            onClick = { selectedWarningId = null },
+                            modifier = Modifier.testTag("map_warning_summary_close"),
+                        ) {
+                            Text("Schlie\u00dfen")
+                        }
+                        TextButton(
+                            onClick = {
+                                mapWarningDetailsActionOrNull(
+                                    currentWarningOverlays,
+                                    selectedWarningId,
+                                )?.let { currentOnOpenWarning(it.warningId) }
+                            },
+                            modifier = Modifier.testTag("map_warning_open_details"),
+                        ) {
+                            Text("Zur Meldung", color = mapWarningRed)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     LaunchedEffect(mapNotice, mapLoadStatus) {
@@ -414,6 +569,23 @@ fun FullBleedMap(
         delay(4_000)
         if (mapNotice == notice && mapLoadStatus == MapLoadStatus.ONLINE_STYLE_READY) {
             mapNotice = null
+        }
+    }
+
+    LaunchedEffect(focusedWarningId, renderableWarnings) {
+        if (focusedWarningId != null) {
+            selectedWarningId =
+                mapWarningFocusActionOrNull(renderableWarnings, focusedWarningId)
+                    ?.overlay
+                    ?.id
+        } else if (mapWarningFocusActionOrNull(renderableWarnings, selectedWarningId) == null) {
+            selectedWarningId = null
+        }
+    }
+
+    LaunchedEffect(focusedWarningId) {
+        if (focusedWarningId == null) {
+            warningFocusGate = warningFocusGate.reset()
         }
     }
 
@@ -443,13 +615,16 @@ fun FullBleedMap(
         harbours,
         breadcrumbs,
         currentLocation,
+        renderableWarnings,
     ) {
         if (styleGeneration == 0 || state.destroyed) return@LaunchedEffect
+        val fills = state.fills ?: return@LaunchedEffect
         val circles = state.circles ?: return@LaunchedEffect
         val lines = state.lines ?: return@LaunchedEffect
         val symbols = state.symbols ?: return@LaunchedEffect
 
         runCatching {
+            fills.deleteAll()
             circles.deleteAll()
             lines.deleteAll()
             symbols.deleteAll()
@@ -505,7 +680,68 @@ fun FullBleedMap(
                         .withTextSize(12f)
                         .withTextOffset(arrayOf(0f, 1.45f)),
                 ).apply {
-                    data = com.google.gson.JsonPrimitive("harbour:${harbour.id}")
+                    data = JsonPrimitive("$HARBOUR_DATA_PREFIX${harbour.id}")
+                }
+            }
+
+            renderableWarnings.forEach { warning ->
+                val warningPoints = warning.coordinates.map(MapWarningCoordinate::toLatLng)
+                val annotationData = JsonPrimitive("$WARNING_DATA_PREFIX${warning.id}")
+
+                fun createWarningMarker(point: LatLng) {
+                    circles.create(
+                        CircleOptions()
+                            .withLatLng(point)
+                            .withCircleRadius(10f)
+                            .withCircleColor(mapWarningRed.toMapLibreRgba())
+                            .withCircleStrokeColor(Color.White.toMapLibreRgba())
+                            .withCircleStrokeWidth(3f),
+                    ).data = annotationData
+                    symbols.create(
+                        SymbolOptions()
+                            .withLatLng(point)
+                            .withTextField("!")
+                            .withTextColor(Color.White.toMapLibreRgba())
+                            .withTextHaloColor(mapWarningDarkRed.toMapLibreRgba())
+                            .withTextHaloWidth(1.5f)
+                            .withTextSize(15f),
+                    ).data = annotationData
+                }
+
+                when (warning.geometryType) {
+                    MapWarningGeometryType.POINT,
+                    MapWarningGeometryType.MULTI_POINT,
+                    -> warningPoints.forEach(::createWarningMarker)
+
+                    MapWarningGeometryType.LINE -> {
+                        lines.create(
+                            LineOptions()
+                                .withLatLngs(warningPoints)
+                                .withLineColor(mapWarningRed.toMapLibreRgba())
+                                .withLineWidth(5f)
+                                .withLineOpacity(0.96f),
+                        ).data = annotationData
+                        createWarningMarker(warningPoints.first())
+                    }
+
+                    MapWarningGeometryType.AREA -> {
+                        val ring = warningPoints.closedRing()
+                        fills.create(
+                            FillOptions()
+                                .withLatLngs(listOf(ring))
+                                .withFillColor(mapWarningRed.toMapLibreRgba())
+                                .withFillOutlineColor(mapWarningDarkRed.toMapLibreRgba())
+                                .withFillOpacity(0.24f),
+                        ).data = annotationData
+                        lines.create(
+                            LineOptions()
+                                .withLatLngs(ring)
+                                .withLineColor(mapWarningDarkRed.toMapLibreRgba())
+                                .withLineWidth(3f)
+                                .withLineOpacity(0.98f),
+                        ).data = annotationData
+                        createWarningMarker(warningPoints.first())
+                    }
                 }
             }
 
@@ -525,7 +761,14 @@ fun FullBleedMap(
     }
 
     LaunchedEffect(route, styleGeneration, followLocation) {
-        if (styleGeneration == 0 || followLocation || route.isEmpty()) return@LaunchedEffect
+        if (
+            styleGeneration == 0 ||
+            followLocation ||
+            route.isEmpty() ||
+            selectedWarning != null
+        ) {
+            return@LaunchedEffect
+        }
         val map = state.map ?: return@LaunchedEffect
         runCatching {
             if (route.size == 1) {
@@ -537,6 +780,36 @@ fun FullBleedMap(
                     }.build()
                 map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 130), 700)
             }
+        }
+    }
+
+    LaunchedEffect(focusedWarningAction, styleGeneration, followLocation) {
+        val warning = focusedWarningAction?.overlay ?: return@LaunchedEffect
+        if (styleGeneration == 0 || followLocation) return@LaunchedEffect
+        if (!warningFocusGate.canProcess(warning.id)) return@LaunchedEffect
+        val map = state.map ?: return@LaunchedEffect
+        val points = warning.coordinates.map(MapWarningCoordinate::toLatLng)
+        val distinctPoints = points.distinct()
+        if (distinctPoints.isEmpty()) return@LaunchedEffect
+
+        runCatching {
+            if (distinctPoints.size == 1) {
+                map.animateCamera(
+                    CameraUpdateFactory.newLatLngZoom(distinctPoints.first(), 13.5),
+                    550,
+                )
+            } else {
+                val bounds =
+                    LatLngBounds.Builder().also { builder ->
+                        distinctPoints.forEach(builder::include)
+                    }.build()
+                map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 140), 700)
+            }
+        }.onSuccess {
+            warningFocusGate = warningFocusGate.markProcessed(warning.id)
+            currentOnWarningFocusConsumed(warning.id)
+        }.onFailure {
+            Log.w(FULL_BLEED_MAP_TAG, "Warning camera focus failed", it)
         }
     }
 
@@ -582,6 +855,25 @@ fun FullBleedMap(
                 state.stop(view)
             }
         }
+    }
+}
+
+private fun warningIdFromMapAnnotation(raw: String): String? =
+    raw
+        .takeIf { it.startsWith(WARNING_DATA_PREFIX) }
+        ?.removePrefix(WARNING_DATA_PREFIX)
+        ?.takeIf(String::isNotBlank)
+
+private fun MapWarningCoordinate.toLatLng(): LatLng = LatLng(latitude, longitude)
+
+/** MapLibre polygons require a closed ring; this repeats an official vertex without inventing one. */
+private fun List<LatLng>.closedRing(): List<LatLng> {
+    val first = firstOrNull() ?: return emptyList()
+    val last = lastOrNull() ?: return emptyList()
+    return if (first.latitude == last.latitude && first.longitude == last.longitude) {
+        this
+    } else {
+        this + first
     }
 }
 

@@ -35,11 +35,16 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Anchor
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
@@ -69,6 +74,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -86,9 +92,9 @@ import com.example.trnberechnung.ui.theme.OnboardingTeal
 import kotlin.math.atan2
 import kotlinx.coroutines.launch
 
-private const val ONBOARDING_PAGES = 3
 private val OnboardingBackground = Color(0xFFEAFBFA)
 private val OnboardingBrandBlue = Color(0xFF28549B)
+private val OnboardingAlert = Color(0xFFF4511E)
 private val TideNodeNavy = Color(0xFF062E4F)
 private val TideNodeCyan = Color(0xFF12C5C7)
 private val TideNodeSailWhite = Color(0xFFE5F8F7)
@@ -167,6 +173,21 @@ private object TabletOnboardingTokens {
     val WeatherHourlyTemperatureFontSize = 19.sp
     val WeatherWindGap = 7.dp
     val WeatherWindFontSize = 15.sp
+    val WarningHorizontalPadding = 28.dp
+    val WarningVerticalPadding = 18.dp
+    val WarningHeaderIconSize = 58.dp
+    val WarningHeaderGlyphSize = 32.dp
+    val WarningHeaderGap = 16.dp
+    val WarningHeaderTitleFontSize = 24.sp
+    val WarningHeaderSubtitleFontSize = 15.sp
+    val WarningRowsTopSpacing = 16.dp
+    val WarningRowSpacing = 10.dp
+    val WarningRowShape = RoundedCornerShape(22.dp)
+    val WarningRowHorizontalPadding = 18.dp
+    val WarningRowIconSize = 38.dp
+    val WarningRowGlyphSize = 23.dp
+    val WarningRowFontSize = 18.sp
+    val WarningChevronSize = 26.dp
     const val CrewAvatarBob = 5f
     const val CrewDashDistance = 72f
     val CrewAvatarAreaHeight = 190.dp
@@ -420,6 +441,7 @@ private fun OnboardingPage(
     val (eyebrow, title, body) = when (page) {
         0 -> Triple(R.string.onboarding_navigation_eyebrow, R.string.onboarding_navigation_title, R.string.onboarding_navigation_body)
         1 -> Triple(R.string.onboarding_weather_eyebrow, R.string.onboarding_weather_title, R.string.onboarding_weather_body)
+        2 -> Triple(R.string.onboarding_warnings_eyebrow, R.string.onboarding_warnings_title, R.string.onboarding_warnings_body)
         else -> Triple(R.string.onboarding_crew_eyebrow, R.string.onboarding_crew_title, R.string.onboarding_crew_body)
     }
     Column(
@@ -599,6 +621,7 @@ private fun IllustrationCard(
             when (page) {
                 0 -> RouteIllustration(isTablet = false)
                 1 -> WeatherIllustration(isTablet = false)
+                2 -> WarningIllustration(isTablet = false)
                 else -> CrewIllustration(isTablet = false)
             }
         }
@@ -644,9 +667,239 @@ private fun TabletIllustration(page: Int) {
             when (page) {
                 0 -> RouteIllustration(isTablet = true)
                 1 -> WeatherIllustration(isTablet = true)
+                2 -> WarningIllustration(isTablet = true)
                 else -> CrewIllustration(isTablet = true)
             }
         }
+    }
+}
+
+@Composable
+private fun WarningIllustration(isTablet: Boolean) {
+    val horizontalPadding =
+        if (isTablet) {
+            TabletOnboardingTokens.WarningHorizontalPadding
+        } else {
+            4.dp
+        }
+    val verticalPadding =
+        if (isTablet) {
+            TabletOnboardingTokens.WarningVerticalPadding
+        } else {
+            8.dp
+        }
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = horizontalPadding, vertical = verticalPadding)
+                .testTag("onboarding_warnings_illustration"),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(
+                            if (isTablet) {
+                                TabletOnboardingTokens.WarningHeaderIconSize
+                            } else {
+                                42.dp
+                            },
+                        )
+                        .clip(RoundedCornerShape(if (isTablet) 18.dp else 14.dp))
+                        .background(OnboardingAlert.copy(alpha = .12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Notifications,
+                    contentDescription = null,
+                    tint = OnboardingAlert,
+                    modifier =
+                        Modifier.size(
+                            if (isTablet) {
+                                TabletOnboardingTokens.WarningHeaderGlyphSize
+                            } else {
+                                24.dp
+                            },
+                        ),
+                )
+            }
+            Spacer(
+                Modifier.width(
+                    if (isTablet) {
+                        TabletOnboardingTokens.WarningHeaderGap
+                    } else {
+                        10.dp
+                    },
+                ),
+            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.onboarding_warnings_card_title),
+                    color = OnboardingInk,
+                    fontSize =
+                        if (isTablet) {
+                            TabletOnboardingTokens.WarningHeaderTitleFontSize
+                        } else {
+                            15.sp
+                        },
+                    lineHeight = if (isTablet) 28.sp else 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+                Text(
+                    text = stringResource(R.string.onboarding_warnings_card_subtitle),
+                    color = OnboardingMuted,
+                    fontSize =
+                        if (isTablet) {
+                            TabletOnboardingTokens.WarningHeaderSubtitleFontSize
+                        } else {
+                            10.sp
+                        },
+                    lineHeight = if (isTablet) 19.sp else 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+
+        Spacer(
+            Modifier.height(
+                if (isTablet) {
+                    TabletOnboardingTokens.WarningRowsTopSpacing
+                } else {
+                    12.dp
+                },
+            ),
+        )
+
+        Column(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            verticalArrangement =
+                Arrangement.spacedBy(
+                    if (isTablet) {
+                        TabletOnboardingTokens.WarningRowSpacing
+                    } else {
+                        8.dp
+                    },
+                ),
+        ) {
+            WarningFeatureRow(
+                icon = Icons.Default.Warning,
+                label = stringResource(R.string.onboarding_warnings_dangers),
+                color = Color(0xFFF59E0B),
+                background = Color(0xFFFFF4DF),
+                isTablet = isTablet,
+                modifier = Modifier.weight(1f),
+            )
+            WarningFeatureRow(
+                icon = Icons.Default.Anchor,
+                label = stringResource(R.string.onboarding_warnings_marks),
+                color = OnboardingBlue,
+                background = Color(0xFFE1F3FF),
+                isTablet = isTablet,
+                modifier = Modifier.weight(1f),
+            )
+            WarningFeatureRow(
+                icon = Icons.Default.Map,
+                label = stringResource(R.string.onboarding_warnings_map),
+                color = OnboardingTeal,
+                background = Color(0xFFDDF8F3),
+                isTablet = isTablet,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun WarningFeatureRow(
+    icon: ImageVector,
+    label: String,
+    color: Color,
+    background: Color,
+    isTablet: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(
+                    if (isTablet) {
+                        TabletOnboardingTokens.WarningRowShape
+                    } else {
+                        RoundedCornerShape(18.dp)
+                    },
+                )
+                .background(background)
+                .padding(
+                    horizontal =
+                        if (isTablet) {
+                            TabletOnboardingTokens.WarningRowHorizontalPadding
+                        } else {
+                            12.dp
+                        },
+                ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(
+                        if (isTablet) {
+                            TabletOnboardingTokens.WarningRowIconSize
+                        } else {
+                            32.dp
+                        },
+                    )
+                    .clip(RoundedCornerShape(if (isTablet) 12.dp else 10.dp))
+                    .background(Color.White.copy(alpha = .72f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = color,
+                modifier =
+                    Modifier.size(
+                        if (isTablet) {
+                            TabletOnboardingTokens.WarningRowGlyphSize
+                        } else {
+                            19.dp
+                        },
+                    ),
+            )
+        }
+        Spacer(Modifier.width(if (isTablet) 14.dp else 10.dp))
+        Text(
+            text = label,
+            color = OnboardingInk,
+            fontSize =
+                if (isTablet) {
+                    TabletOnboardingTokens.WarningRowFontSize
+                } else {
+                    12.sp
+                },
+            lineHeight = if (isTablet) 22.sp else 15.sp,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = color.copy(alpha = .74f),
+            modifier =
+                Modifier.size(
+                    if (isTablet) {
+                        TabletOnboardingTokens.WarningChevronSize
+                    } else {
+                        20.dp
+                    },
+                ),
+        )
     }
 }
 
@@ -1748,4 +2001,10 @@ private fun TideNodeMark(modifier: Modifier = Modifier) {
     }
 }
 
-private fun pageAccent(page: Int): Color = when(page) { 0 -> OnboardingBlue; 1 -> OnboardingOrange; else -> OnboardingTeal }
+private fun pageAccent(page: Int): Color =
+    when (page) {
+        0 -> OnboardingBlue
+        1 -> OnboardingOrange
+        2 -> OnboardingAlert
+        else -> OnboardingTeal
+    }

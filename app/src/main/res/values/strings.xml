@@ -15,6 +15,14 @@
     <string name="onboarding_weather_sunny">Sonnig</string>
     <string name="onboarding_weather_high_low">H: 23°  T: 17°</string>
     <string name="onboarding_weather_wind">Wind 11 kn     •     Böen 15 kn</string>
+    <string name="onboarding_warnings_eyebrow">SEEFAHRER-MELDUNGEN</string>
+    <string name="onboarding_warnings_title">Meldungen lesen.\nInformiert ablegen.</string>
+    <string name="onboarding_warnings_body">Informieren Sie sich über Sperrungen, Gefahren und veränderte Seezeichen in der Nordsee. Öffnen Sie verortete Meldungen direkt auf der Karte.</string>
+    <string name="onboarding_warnings_card_title">Nordsee-Warnmeldungen</string>
+    <string name="onboarding_warnings_card_subtitle">Hinweise für Ihr Revier</string>
+    <string name="onboarding_warnings_dangers">Gefahren und Sperrungen</string>
+    <string name="onboarding_warnings_marks">Tonnen und Seezeichen</string>
+    <string name="onboarding_warnings_map">Hinweise auf der Karte</string>
     <string name="onboarding_crew_eyebrow">GEMEINSAM AN BORD</string>
     <string name="onboarding_crew_title">Crew und Termine\nverbinden.</string>
     <string name="onboarding_crew_body">Organisiere Rollen und teile Termine mit deiner Crew – alle an Bord wissen, wann es losgeht und wer was übernimmt.</string>

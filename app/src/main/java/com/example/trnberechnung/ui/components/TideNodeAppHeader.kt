@@ -1,6 +1,7 @@
 package com.example.trnberechnung.ui.components
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -30,6 +32,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -60,9 +63,11 @@ internal fun tideNodeAppHeaderHeight(layout: AdaptiveLayout): Dp =
  */
 @Composable
 fun TideNodeAppHeader(
+    onWarnings: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
     onColoredBackground: Boolean = false,
+    hasNewWarnings: Boolean = false,
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val layout = currentAdaptiveLayout()
@@ -157,6 +162,38 @@ fun TideNodeAppHeader(
                 modifier = Modifier.testTag("app_header_wordmark").semantics { heading() },
             )
             Spacer(Modifier.weight(1f))
+            GlassIconButton(
+                icon = Icons.Default.Notifications,
+                contentDescription =
+                    if (hasNewWarnings) {
+                        "Nordsee-Warnmeldungen, neue Meldungen verfügbar"
+                    } else {
+                        "Nordsee-Warnmeldungen"
+                    },
+                onClick = onWarnings,
+                size = buttonSize,
+                iconSize = iconSize,
+                modifier = Modifier.testTag("app_header_warnings"),
+                badge = {
+                    if (hasNewWarnings) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(
+                                        top = if (layout.isTablet) 8.dp else 7.dp,
+                                        end = if (layout.isTablet) 8.dp else 7.dp,
+                                    )
+                                    .size(if (layout.isTablet) 11.dp else 9.dp)
+                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .background(TideNodeDanger)
+                                    .clearAndSetSemantics { }
+                                    .testTag("app_header_warnings_badge"),
+                        )
+                    }
+                },
+            )
+            Spacer(Modifier.size(if (layout.isTablet) 10.dp else 7.dp))
             GlassIconButton(
                 icon = Icons.Default.Settings,
                 contentDescription = "Einstellungen",
