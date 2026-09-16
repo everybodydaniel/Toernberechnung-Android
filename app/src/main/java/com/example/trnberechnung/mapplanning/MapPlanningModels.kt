@@ -7,6 +7,10 @@ import java.util.UUID
 
 val MAP_PLANNING_ZONE_ID: ZoneId = ZoneId.of("Europe/Berlin")
 
+const val MIN_PLANNING_SPEED_KNOTS = 1.0
+const val MAX_PLANNING_SPEED_KNOTS = 30.0
+const val PLANNING_SPEED_STEP_KNOTS = 0.5
+
 data class GeoPoint(
     val latitude: Double,
     val longitude: Double,
@@ -105,6 +109,7 @@ data class RouteMetrics(
 data class PassageWindow(
     val start: ZonedDateTime,
     val end: ZonedDateTime,
+    val recommendedDeparture: ZonedDateTime? = null,
     val anchoredHighWater: ZonedDateTime? = null,
     val bottleneckName: String? = null,
     val waterLevelQuality: WaterLevelQuality = WaterLevelQuality.LOCAL_OFFICIAL,
@@ -144,6 +149,7 @@ data class RoutePlanningUiState(
     val weatherStatus: WeatherStatus = WeatherStatus.UNVOLLSTAENDIG,
     val routeMetrics: RouteMetrics? = null,
     val passageWindows: List<PassageWindow> = emptyList(),
+    val hasCalculatedResult: Boolean = false,
     val isCalculating: Boolean = false,
     val isSearchingPassageWindow: Boolean = false,
     val failureReason: SafetyFailureReason = SafetyFailureReason.NONE,
@@ -155,6 +161,31 @@ data class RoutePlanningUiState(
             startHarbourId != null &&
                 destinationHarbourId != null &&
                 startHarbourId != destinationHarbourId
+
+    val hasValidPlanningInputs: Boolean
+        get() {
+            if (!hasCompleteRouteInput) return false
+            if (boatSettings.speedKnots !in MIN_PLANNING_SPEED_KNOTS..MAX_PLANNING_SPEED_KNOTS) {
+                return false
+            }
+            val endpointIds = setOfNotNull(startHarbourId, destinationHarbourId)
+            val stopIds = intermediateStops.map(IntermediateStop::harbourId)
+            return stopIds.size == stopIds.distinct().size && stopIds.none(endpointIds::contains)
+        }
+
+    val isWorking: Boolean
+        get() = isCalculating || isSearchingPassageWindow
+
+    val canCalculate: Boolean
+        get() = hasValidPlanningInputs && !isWorking
+
+    val effectiveDeparture: ZonedDateTime
+        get() =
+            if (hasCalculatedResult) {
+                routeMetrics?.let { it.arrival.minus(it.travelTime) } ?: departure
+            } else {
+                departure
+            }
 
     val routeTitle: String
         get() {

@@ -2,6 +2,7 @@ package com.example.trnberechnung.ui.map
 
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import androidx.compose.foundation.background
@@ -25,6 +26,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -144,6 +146,7 @@ private enum class MapLoadStatus {
 private const val FULL_BLEED_MAP_TAG = "FullBleedMap"
 private const val MAP_START_TIMEOUT_MILLIS = 8_000L
 private const val MAP_FALLBACK_TIMEOUT_MILLIS = 2_500L
+private const val FOLLOW_CAMERA_UPDATE_INTERVAL_MILLIS = 1_000L
 private const val HARBOUR_DATA_PREFIX = "harbour:"
 private const val WARNING_DATA_PREFIX = "warning:"
 private val mapWarningRed = Color(0xFFDC2626)
@@ -189,6 +192,7 @@ fun FullBleedMap(
     val currentOnWarningFocusConsumed by rememberUpdatedState(onWarningFocusConsumed)
     val currentOnOpenWarning by rememberUpdatedState(onOpenWarning)
     var warningFocusGate by remember { mutableStateOf(MapWarningFocusGate()) }
+    var lastFollowCameraUpdateAt by remember { mutableLongStateOf(Long.MIN_VALUE) }
 
     fun selectWarning(warningId: String): Boolean {
         val action = mapWarningFocusActionOrNull(currentWarningOverlays, warningId) ?: return false
@@ -392,25 +396,26 @@ fun FullBleedMap(
             },
             onRelease = { view ->
                 state.destroyed = true
-                runCatching {
-                    state.fills?.deleteAll()
-                    state.symbols?.deleteAll()
-                    state.lines?.deleteAll()
-                    state.circles?.deleteAll()
-                    state.fills?.onDestroy()
-                    state.symbols?.onDestroy()
-                    state.lines?.onDestroy()
-                    state.circles?.onDestroy()
-                    state.stop(view)
-                    view.onDestroy()
-                }
-                state.map = null
+                state.styleRequestId += 1
+                state.loadOnlineStyle = null
+                state.loadOfflineStyle = null
+
+                // Stop the native render thread before detaching annotation listeners or
+                // destroying the MapView. Calling deleteAll() here used to enqueue four style
+                // updates while MapLibre could still be inside glDrawElements, which races the
+                // outgoing map's surface teardown during Compose navigation.
+                state.stop(view)
+                state.fills?.onDestroy()
+                state.symbols?.onDestroy()
+                state.lines?.onDestroy()
+                state.circles?.onDestroy()
+
                 state.fills = null
                 state.symbols = null
                 state.lines = null
                 state.circles = null
-                state.loadOnlineStyle = null
-                state.loadOfflineStyle = null
+                state.map = null
+                view.onDestroy()
             },
         )
 
@@ -814,16 +819,34 @@ fun FullBleedMap(
     }
 
     LaunchedEffect(currentLocation, headingDegrees, followLocation, styleGeneration) {
-        if (!followLocation || currentLocation == null || styleGeneration == 0) return@LaunchedEffect
+        if (!followLocation || currentLocation == null || styleGeneration == 0) {
+            lastFollowCameraUpdateAt = Long.MIN_VALUE
+            return@LaunchedEffect
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (
+            lastFollowCameraUpdateAt != Long.MIN_VALUE &&
+            now - lastFollowCameraUpdateAt < FOLLOW_CAMERA_UPDATE_INTERVAL_MILLIS
+        ) {
+            return@LaunchedEffect
+        }
+        lastFollowCameraUpdateAt = now
         val map = state.map ?: return@LaunchedEffect
+        val safeBearing =
+            headingDegrees?.takeIf(Double::isFinite)
+                ?: map.cameraPosition.bearing.takeIf(Double::isFinite)
+                ?: 0.0
         val camera =
             CameraPosition.Builder()
                 .target(currentLocation)
                 .zoom(14.2)
-                .bearing(headingDegrees ?: map.cameraPosition.bearing)
+                .bearing(safeBearing)
                 .tilt(32.0)
                 .build()
-        runCatching { map.animateCamera(CameraUpdateFactory.newCameraPosition(camera), 420) }
+        // SENSOR_DELAY_UI produces roughly 15 heading samples per second. Forwarding every sample
+        // to MapLibre overwhelms its native camera/render pipeline on some Android GL drivers.
+        // Follow mode needs the latest pose, not a queue of intermediate transitions.
+        map.moveCamera(CameraUpdateFactory.newCameraPosition(camera))
     }
 
     DisposableEffect(lifecycleOwner, mapViewHolder.value) {

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -94,22 +95,63 @@ class FullAppUiTest {
         composeTestRule.onNodeWithTag("NautiInlinePanel").assertIsDisplayed()
         composeTestRule.onNodeWithTag("NautiInlineChat").assertDoesNotExist()
 
-        // The planner is a full-height sheet and can be dismissed without
-        // clearing its long-lived ViewModel state.
+        // Closing the planner discards the unsaved draft. Reopening it must not expose stale
+        // endpoints or a result dashboard from the abandoned plan.
         composeTestRule.onNodeWithTag("route_planning_pill").performClick()
         composeTestRule.onNodeWithTag("route_planner_sheet").assertIsDisplayed()
         composeTestRule.onNodeWithTag("route_start_selector").assertExists()
         composeTestRule.onNodeWithTag("route_destination_selector").assertExists()
+        composeTestRule.onNodeWithTag("route_start_selector").performClick()
+        composeTestRule.onNodeWithText("Emden, Hafen", useUnmergedTree = true).performClick()
+        composeTestRule.onNodeWithTag("route_destination_selector").performClick()
+        composeTestRule.onNodeWithText("Norderney, Hafen", useUnmergedTree = true).performClick()
+        composeTestRule.onNodeWithTag("route_planner_close").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("route_planner_sheet").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("route_result_dashboard").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("route_planning_pill").performClick()
+        composeTestRule.onNodeWithTag("route_start_selector").assertTextContains("Nicht gewählt")
+        composeTestRule.onNodeWithTag("route_destination_selector").assertTextContains("Nicht gewählt")
         composeTestRule.onNodeWithTag("route_planner_close").performClick()
         composeTestRule.waitForIdle()
 
         // Nauti lives only on the map and exposes chat plus history.
+        val plannerBounds =
+            composeTestRule
+                .onNodeWithTag("route_planning_pill")
+                .fetchSemanticsNode()
+                .boundsInRoot
         composeTestRule.onNodeWithTag("NautiInlinePanel").performClick()
         composeTestRule.onNodeWithTag("NautiInlineChat").assertIsDisplayed()
+        val chatBounds =
+            composeTestRule
+                .onNodeWithTag("NautiInlinePanel")
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val bottomNavigationBounds =
+            composeTestRule
+                .onNodeWithTag("global_bottom_navigation")
+                .fetchSemanticsNode()
+                .boundsInRoot
+        assertTrue(
+            "Nauti chat must start below the route-planning action",
+            chatBounds.top > plannerBounds.bottom,
+        )
+        assertTrue(
+            "Nauti chat must end above the bottom navigation",
+            chatBounds.bottom < bottomNavigationBounds.top,
+        )
         composeTestRule.onNodeWithContentDescription("Verlauf").performClick()
         composeTestRule.onNodeWithTag("NautiInlineHistory").assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription("Zurück zum Chat").performClick()
         composeTestRule.onNodeWithContentDescription("Chat einklappen").performClick()
+        repeat(3) {
+            composeTestRule.onNodeWithTag("NautiInlinePanel").performClick()
+            composeTestRule.onNodeWithTag("NautiInlineChat").assertIsDisplayed()
+            composeTestRule.onNodeWithContentDescription("Chat einklappen").performClick()
+            composeTestRule.onNodeWithTag("NautiInlineChat").assertDoesNotExist()
+            composeTestRule.onNodeWithTag("NautiInlinePanel").assertIsDisplayed()
+        }
 
         composeTestRule.onNodeWithTag("nav_revier").performClick()
         composeTestRule.onNodeWithTag("nav_revier").assertIsSelected()

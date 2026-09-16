@@ -1,8 +1,8 @@
 package com.example.trnberechnung.ui
 
-import android.app.Activity
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -50,7 +50,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -72,13 +71,11 @@ import com.example.trnberechnung.mapplanning.RoutePlanningViewModelFactory
 import com.example.trnberechnung.mapplanning.SimpleTidalCurrentProvider
 import com.example.trnberechnung.nauti.GeminiNautiClient
 import com.example.trnberechnung.repository.TideRepository
-import com.example.trnberechnung.navigation.ActiveVoyageState
 import com.example.trnberechnung.navigation.SensorHeadingProvider
 import com.example.trnberechnung.navigation.VoyageServiceController
 import com.example.trnberechnung.ui.components.GlassIconButton
 import com.example.trnberechnung.ui.components.TideNodeAppHeader
 import com.example.trnberechnung.ui.components.TideNodeBlue
-import com.example.trnberechnung.ui.components.TideNodeInk
 import com.example.trnberechnung.ui.components.tideNodeAppHeaderHeight
 import com.example.trnberechnung.ui.components.tideNodeGlass
 import com.example.trnberechnung.ui.map.MapTabScreen
@@ -218,8 +215,6 @@ fun MainAppScreen(
             )
         }
 
-    val activeVoyageState by application.activeVoyageManager.state.collectAsState()
-
     LaunchedEffect(Unit) {
         application.activeVoyageManager.restoreActiveVoyage()
     }
@@ -279,6 +274,13 @@ fun MainAppScreen(
             navController = navController,
             startDestination = Screen.MapRoute.route,
             modifier = Modifier.fillMaxSize(),
+            // MapLibre uses a native GL render thread. Navigation Compose's default cross-fade
+            // keeps the outgoing MapView alive while the incoming navigation MapView starts,
+            // which can make the old renderer draw into a surface that is being released.
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None },
         ) {
             composable(Screen.MapRoute.route) {
                 MapTabScreen(
@@ -371,18 +373,11 @@ fun MainAppScreen(
                 }
             }
             composable(Screen.Navigation.route) {
-                if (activeVoyageState !is ActiveVoyageState.Active) {
-                    LaunchedEffect(Unit) {
-                        navController.navigateMainTab(Screen.MapRoute.route)
-                    }
-                }
                 FullScreenNavigationScreen(
                     activeVoyageManager = application.activeVoyageManager,
                     locationProvider = application.navigationLocationProvider,
                     headingProvider = headingProvider,
-                    onMinimize = {
-                        navController.navigateMainTab(Screen.MapRoute.route)
-                    },
+                    onMinimize = navController::minimizeActiveNavigation,
                     onVoyageFinished = {
                         VoyageServiceController.stop(context)
                         navController.navigateMainTab(Screen.MapRoute.route)
@@ -446,56 +441,6 @@ fun MainAppScreen(
                 )
             }
 
-            if (
-                currentRoute == Screen.MapRoute.route &&
-                activeVoyageState is ActiveVoyageState.Active
-            ) {
-                val onResumeVoyage = {
-                    (context as? Activity)?.let(VoyageServiceController::startFromVisibleActivity)
-                    navController.navigate(Screen.Navigation.route) {
-                        launchSingleTop = true
-                    }
-                    Unit
-                }
-                if (adaptiveLayout.isTablet) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .padding(start = safeDrawingStart, end = safeDrawingEnd),
-                    ) {
-                        ActiveVoyageResumePill(
-                            onClick = onResumeVoyage,
-                            modifier =
-                                Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(horizontal = adaptiveLayout.horizontalScreenPadding)
-                                    .widthIn(max = adaptiveLayout.overlayMaxWidth)
-                                    .fillMaxWidth()
-                                    .padding(bottom = mapBottomClearance + 8.dp),
-                        )
-                    }
-                } else {
-                    ActiveVoyageResumePill(
-                        onClick = onResumeVoyage,
-                        modifier =
-                            Modifier
-                                .align(if (isLandscape) Alignment.BottomStart else Alignment.BottomCenter)
-                                .then(
-                                    if (isLandscape) {
-                                        Modifier.fillMaxWidth(0.48f).widthIn(max = 440.dp)
-                                    } else {
-                                        Modifier
-                                    },
-                                )
-                                .padding(
-                                    start = 28.dp,
-                                    end = 28.dp,
-                                    bottom = mapBottomClearance + 8.dp,
-                                ),
-                    )
-                }
-            }
         }
     }
 }
@@ -705,54 +650,17 @@ private fun TideNodeBottomNavigation(
     }
 }
 
-@Composable
-private fun ActiveVoyageResumePill(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .tideNodeGlass(cornerRadius = 25.dp, elevation = 10.dp, alpha = 0.88f)
-                .clickable(
-                    onClick = onClick,
-                    onClickLabel = "Aktive Navigation fortsetzen",
-                    role = Role.Button,
-                )
-                .padding(horizontal = 18.dp, vertical = 12.dp)
-                .testTag("active_voyage_resume"),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Default.Map, null, tint = TideNodeBlue)
-        Spacer(Modifier.size(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                "Aktive Fahrt",
-                color = TideNodeInk,
-                fontWeight = FontWeight.ExtraBold,
-            )
-            Text(
-                "Navigation fortsetzen",
-                color = Color(0xFF62666C),
-                fontSize = 12.sp,
-            )
-        }
-        Text(
-            "›",
-            color = TideNodeBlue,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.clearAndSetSemantics { }
-        )
-    }
-}
-
 private fun NavHostController.navigateMainTab(route: String) {
     navigate(route) {
         popUpTo(graph.startDestinationId) { saveState = true }
         launchSingleTop = true
         restoreState = true
+    }
+}
+
+private fun NavHostController.minimizeActiveNavigation() {
+    if (!popBackStack(Screen.MapRoute.route, inclusive = false)) {
+        navigateMainTab(Screen.MapRoute.route)
     }
 }
 

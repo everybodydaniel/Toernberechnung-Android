@@ -102,7 +102,7 @@ class PassageWindowScanner(
             currentCoroutineContext().ensureActive()
             val assessment = evaluator.evaluate(candidate)
             if (assessment.isSafe) {
-                val safeAssessment = assessment.toSafeAssessment()
+                val safeAssessment = assessment.toSafeAssessment(candidate)
                 openWindow =
                     openWindow?.apply {
                         end = candidate
@@ -125,6 +125,7 @@ class PassageWindowScanner(
 
     private data class SafeAssessment(
         val quality: WaterLevelQuality,
+        val recommendedDeparture: ZonedDateTime,
         val anchoredHighWater: ZonedDateTime?,
         val bottleneckName: String?,
         val worstClearance: Double,
@@ -136,14 +137,18 @@ class PassageWindowScanner(
         var assessment: SafeAssessment,
     ) {
         fun merge(candidate: SafeAssessment) {
+            val worstQuality =
+                if (candidate.quality.qualityRank > assessment.quality.qualityRank) {
+                    candidate.quality
+                } else {
+                    assessment.quality
+                }
             // Wir behalten die Daten des "sichersten" Zeitpunkts im Fenster (meiste Wassertiefe),
             // damit die Anzeige von Wattenhoch und Engstelle repräsentativ ist.
             if (candidate.worstClearance > assessment.worstClearance) {
-                assessment = candidate
-            }
-            // Aber die schlechteste Datenqualität gewinnt immer als Warnung
-            if (candidate.quality.qualityRank > assessment.quality.qualityRank) {
-                assessment = assessment.copy(quality = candidate.quality)
+                assessment = candidate.copy(quality = worstQuality)
+            } else if (worstQuality != assessment.quality) {
+                assessment = assessment.copy(quality = worstQuality)
             }
         }
 
@@ -151,6 +156,7 @@ class PassageWindowScanner(
             PassageWindow(
                 start = start,
                 end = end,
+                recommendedDeparture = assessment.recommendedDeparture,
                 anchoredHighWater = assessment.anchoredHighWater,
                 bottleneckName = assessment.bottleneckName,
                 waterLevelQuality = assessment.quality,
@@ -158,10 +164,13 @@ class PassageWindowScanner(
             )
     }
 
-    private fun PassageCandidateAssessment.toSafeAssessment(): SafeAssessment {
+    private fun PassageCandidateAssessment.toSafeAssessment(
+        departure: ZonedDateTime,
+    ): SafeAssessment {
         val bottleneck = bottleneck
         return SafeAssessment(
             quality = worstQuality,
+            recommendedDeparture = departure,
             anchoredHighWater = bottleneck?.anchoredHighWater,
             bottleneckName = bottleneck?.waypointName,
             worstClearance = worstClearance

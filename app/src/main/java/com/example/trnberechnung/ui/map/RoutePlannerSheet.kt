@@ -1,7 +1,6 @@
 package com.example.trnberechnung.ui.map
 
 import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,11 +15,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,10 +33,11 @@ import androidx.compose.material.icons.filled.Anchor
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -51,6 +55,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,8 +83,13 @@ import com.example.trnberechnung.mapplanning.HarbourCatalog
 import com.example.trnberechnung.mapplanning.HarbourId
 import com.example.trnberechnung.mapplanning.IntermediateStop
 import com.example.trnberechnung.mapplanning.MAP_PLANNING_ZONE_ID
+import com.example.trnberechnung.mapplanning.MAX_PLANNING_SPEED_KNOTS
+import com.example.trnberechnung.mapplanning.MIN_PLANNING_SPEED_KNOTS
+import com.example.trnberechnung.mapplanning.PLANNING_SPEED_STEP_KNOTS
+import com.example.trnberechnung.mapplanning.PassageWindow
 import com.example.trnberechnung.mapplanning.RoutePlanningUiState
 import com.example.trnberechnung.mapplanning.RoutePlanningViewModel
+import com.example.trnberechnung.mapplanning.WaterLevelQuality
 import com.example.trnberechnung.ui.components.TideNodeBlue
 import com.example.trnberechnung.ui.components.TideNodeCyan
 import com.example.trnberechnung.ui.components.TideNodeInk
@@ -100,10 +110,16 @@ private val routeTimeFormatter =
 fun RoutePlannerSheet(
     viewModel: RoutePlanningViewModel,
     onDismiss: () -> Unit,
+    onCalculationCompleted: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val discardAndDismiss: () -> Unit = {
+        viewModel.discardPlanning()
+        onDismiss()
+    }
 
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val sheetBg = if (isDark) Color(0xFF0F172A) else Color.White
@@ -111,7 +127,7 @@ fun RoutePlannerSheet(
     val handleColor = if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1)
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = discardAndDismiss,
         sheetState = sheetState,
         containerColor = sheetBg,
         contentColor = sheetContentColor,
@@ -133,8 +149,15 @@ fun RoutePlannerSheet(
             onAddStops = viewModel::addIntermediateStops,
             onRemoveStop = viewModel::removeIntermediateStop,
             onDepartureChanged = viewModel::updateDeparture,
-            onRefreshPassageWindow = viewModel::refreshPassageWindow,
-            onDismiss = onDismiss,
+            onSpeedChanged = viewModel::updatePlanningSpeed,
+            onCalculate = {
+                if (uiState.hasCalculatedResult) {
+                    onCalculationCompleted()
+                } else if (!uiState.isWorking) {
+                    viewModel.calculateRoute()
+                }
+            },
+            onDismiss = discardAndDismiss,
         )
     }
 }
@@ -147,15 +170,23 @@ fun RoutePlannerSheetContent(
     onAddStops: (Iterable<HarbourId>) -> Int,
     onRemoveStop: (java.util.UUID) -> Unit,
     onDepartureChanged: (ZonedDateTime) -> Unit,
-    onRefreshPassageWindow: () -> Unit,
+    onSpeedChanged: (Double) -> Unit,
+    onCalculate: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showStopPicker by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
     val berlinDeparture =
         remember(uiState.departure) {
             uiState.departure.withZoneSameInstant(MAP_PLANNING_ZONE_ID)
         }
+
+    LaunchedEffect(uiState.hasCalculatedResult, uiState.error) {
+        if (uiState.hasCalculatedResult || uiState.error != null) {
+            listState.animateScrollToItem(1)
+        }
+    }
 
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val contentBg = if (isDark) Color(0xFF0F172A) else Color.White
@@ -166,115 +197,144 @@ fun RoutePlannerSheetContent(
     val iconBg = if (isDark) Color(0xFF1E3A8A).copy(alpha = 0.50f) else Color(0x1F2563EB)
     val iconTint = if (isDark) Color(0xFF60A5FA) else TideNodeBlue
 
-    LazyColumn(
+    Box(
         modifier =
             modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.96f)
                 .background(contentBg)
-                .padding(horizontal = 16.dp)
                 .testTag("route_planner_content"),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item {
-            PlannerSheetHeader(onDismiss)
-        }
-        item {
-            Column(
+        Column(
+            modifier =
+                Modifier
+                    .widthIn(max = 640.dp)
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .align(Alignment.TopCenter),
+        ) {
+            PlannerSheetHeader(
+                onDismiss = onDismiss,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+
+            LazyColumn(
+                state = listState,
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(cardBg)
-                        .border(1.dp, cardBorder, RoundedCornerShape(28.dp))
-                        .padding(18.dp),
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "Törn planen",
-                            color = titleColor,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 30.sp,
-                        )
-                        Text(
-                            "Route, Abfahrt und Zwischenstopps",
-                            color = subtitleColor,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                    Box(
-                        Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                            .background(iconBg),
-                        contentAlignment = Alignment.Center,
+                item {
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(28.dp))
+                                .background(cardBg)
+                                .border(1.dp, cardBorder, RoundedCornerShape(28.dp))
+                                .padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        Icon(Icons.Default.Route, null, tint = iconTint)
-                    }
-                }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "Törn planen",
+                                    color = titleColor,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 30.sp,
+                                )
+                                Text(
+                                    "Route, Abfahrt und Zwischenstopps",
+                                    color = subtitleColor,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            Box(
+                                Modifier
+                                    .size(54.dp)
+                                    .clip(CircleShape)
+                                    .background(iconBg),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Default.Route, null, tint = iconTint)
+                            }
+                        }
 
-                HarbourSelector(
-                    label = "Starthafen",
-                    selected = uiState.startHarbourId?.let(HarbourCatalog::get),
-                    excluded = setOfNotNull(uiState.destinationHarbourId),
-                    onSelected = onStartSelected,
-                    testTag = "route_start_selector",
-                )
+                        HarbourSelector(
+                            label = "Starthafen",
+                            selected = uiState.startHarbourId?.let(HarbourCatalog::get),
+                            excluded = setOfNotNull(uiState.destinationHarbourId),
+                            onSelected = onStartSelected,
+                            testTag = "route_start_selector",
+                        )
 
-                StopsHeader(
-                    enabled =
-                        HarbourCatalog.all.any { harbour ->
-                            harbour.id != uiState.startHarbourId &&
-                                harbour.id != uiState.destinationHarbourId &&
-                                uiState.intermediateStops.none { it.harbourId == harbour.id }
-                        },
-                    onAdd = { showStopPicker = true },
-                )
-                if (uiState.intermediateStops.isEmpty()) {
-                    Text(
-                        "Noch keine Zwischenstopps",
-                        modifier = Modifier.padding(horizontal = 10.dp),
-                        color = Color(0xFF858990),
-                        fontSize = 14.sp,
-                    )
-                } else {
-                    uiState.intermediateStops.forEachIndexed { index, stop ->
-                        IntermediateStopRow(
-                            order = index + 1,
-                            stop = stop,
-                            onRemove = { onRemoveStop(stop.id) },
+                        StopsHeader(
+                            enabled =
+                                HarbourCatalog.all.any { harbour ->
+                                    harbour.id != uiState.startHarbourId &&
+                                        harbour.id != uiState.destinationHarbourId &&
+                                        uiState.intermediateStops.none { it.harbourId == harbour.id }
+                                },
+                            onAdd = { showStopPicker = true },
+                        )
+                        if (uiState.intermediateStops.isEmpty()) {
+                            Text(
+                                "Noch keine Zwischenstopps",
+                                modifier = Modifier.padding(horizontal = 10.dp),
+                                color = Color(0xFF858990),
+                                fontSize = 14.sp,
+                            )
+                        } else {
+                            uiState.intermediateStops.forEachIndexed { index, stop ->
+                                IntermediateStopRow(
+                                    order = index + 1,
+                                    stop = stop,
+                                    onRemove = { onRemoveStop(stop.id) },
+                                )
+                            }
+                        }
+
+                        HarbourSelector(
+                            label = "Zielhafen",
+                            selected = uiState.destinationHarbourId?.let(HarbourCatalog::get),
+                            excluded = setOfNotNull(uiState.startHarbourId),
+                            onSelected = onDestinationSelected,
+                            testTag = "route_destination_selector",
+                        )
+
+                        DepartureRow(
+                            departure = berlinDeparture,
+                            onDepartureChanged = onDepartureChanged,
+                        )
+
+                        SpeedRow(
+                            speedKnots = uiState.boatSettings.speedKnots,
+                            enabled = !uiState.isWorking,
+                            onSpeedChanged = onSpeedChanged,
                         )
                     }
                 }
 
-                HarbourSelector(
-                    label = "Zielhafen",
-                    selected = uiState.destinationHarbourId?.let(HarbourCatalog::get),
-                    excluded = setOfNotNull(uiState.startHarbourId),
-                    onSelected = onDestinationSelected,
-                    testTag = "route_destination_selector",
-                )
-
-                DepartureRow(
-                    departure = berlinDeparture,
-                    onDepartureChanged = onDepartureChanged,
-                )
+                item {
+                    PassageWindowCard(uiState = uiState)
+                }
+                item {
+                    Spacer(Modifier.height(4.dp))
+                }
             }
-        }
 
-        item {
-            PassageWindowCard(
-                uiState = uiState,
-                onRefresh = onRefreshPassageWindow,
+            PlannerCalculateFooter(
+                enabled = uiState.canCalculate,
+                isWorking = uiState.isWorking,
+                hasCalculatedResult = uiState.hasCalculatedResult,
+                onCalculate = onCalculate,
             )
-        }
-        item {
-            Spacer(Modifier.height(24.dp))
         }
     }
 
@@ -293,14 +353,17 @@ fun RoutePlannerSheetContent(
 }
 
 @Composable
-private fun PlannerSheetHeader(onDismiss: () -> Unit) {
+private fun PlannerSheetHeader(
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val textColor = if (isDark) Color.White else TideNodeInk
     val closeBg = if (isDark) Color(0xFF1E293B) else Color.White.copy(alpha = 0.72f)
     val closeTint = if (isDark) Color(0xFFF8FAFC) else TideNodeInk
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        modifier = modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(Modifier.size(48.dp))
@@ -322,6 +385,62 @@ private fun PlannerSheetHeader(onDismiss: () -> Unit) {
                     .testTag("route_planner_close"),
         ) {
             Icon(Icons.Default.Close, "Törnplanung schließen", tint = closeTint)
+        }
+    }
+}
+
+@Composable
+private fun PlannerCalculateFooter(
+    enabled: Boolean,
+    isWorking: Boolean,
+    hasCalculatedResult: Boolean,
+    onCalculate: () -> Unit,
+) {
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val footerBg = if (isDark) Color(0xFF0F172A) else Color.White
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(footerBg)
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 12.dp),
+    ) {
+        Button(
+            onClick = onCalculate,
+            enabled = enabled && !isWorking,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .testTag("route_calculate"),
+            shape = RoundedCornerShape(28.dp),
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor = TideNodeBlue,
+                    contentColor = Color.White,
+                    disabledContainerColor = if (isDark) Color(0xFF334155) else Color(0xFFCBD5E1),
+                    disabledContentColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                ),
+        ) {
+            if (isWorking) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp,
+                )
+                Spacer(Modifier.width(10.dp))
+            } else {
+                Icon(Icons.Default.Route, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(
+                text = if (hasCalculatedResult) "Planungsergebnis anzeigen" else "Törn berechnen",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 16.sp,
+            )
         }
     }
 }
@@ -534,7 +653,7 @@ private fun DepartureRow(
                 onDepartureChanged(
                     ZonedDateTime.of(
                         LocalDate.of(year, month + 1, day),
-                        departure.toLocalTime(),
+                        LocalTime.NOON,
                         MAP_PLANNING_ZONE_ID,
                     ),
                 )
@@ -544,24 +663,6 @@ private fun DepartureRow(
             departure.dayOfMonth,
         ).show()
     }
-    val openTimePicker = {
-        TimePickerDialog(
-            context,
-            { _, hour, minute ->
-                onDepartureChanged(
-                    ZonedDateTime.of(
-                        departure.toLocalDate(),
-                        LocalTime.of(hour, minute),
-                        MAP_PLANNING_ZONE_ID,
-                    ),
-                )
-            },
-            departure.hour,
-            departure.minute,
-            true,
-        ).show()
-    }
-
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val rowBg = if (isDark) Color(0xFF0F172A) else Color(0xFFF5F6FA).copy(alpha = 0.9f)
 
@@ -574,16 +675,13 @@ private fun DepartureRow(
                 .padding(12.dp),
     ) {
         val stackControls = this.maxWidth < 290.dp
-        val useCompactChips = this.maxWidth < 370.dp
 
         if (stackControls) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 DepartureLabel()
                 DepartureControls(
                     departure = departure,
-                    showChipIcons = false,
                     onDateClick = openDatePicker,
-                    onTimeClick = openTimePicker,
                     modifier = Modifier.align(Alignment.End),
                 )
             }
@@ -596,9 +694,7 @@ private fun DepartureRow(
                 Spacer(Modifier.width(6.dp))
                 DepartureControls(
                     departure = departure,
-                    showChipIcons = !useCompactChips,
                     onDateClick = openDatePicker,
-                    onTimeClick = openTimePicker,
                 )
             }
         }
@@ -625,7 +721,7 @@ private fun DepartureLabel(modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.width(10.dp))
         Text(
-            "Abfahrt",
+            "Abfahrtstag",
             color = labelColor,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
@@ -638,9 +734,7 @@ private fun DepartureLabel(modifier: Modifier = Modifier) {
 @Composable
 private fun DepartureControls(
     departure: ZonedDateTime,
-    showChipIcons: Boolean,
     onDateClick: () -> Unit,
-    onTimeClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -649,18 +743,10 @@ private fun DepartureControls(
     ) {
         PlannerTimeChip(
             text = departure.format(routeDateFormatter),
-            icon = Icons.Default.CalendarMonth.takeIf { showChipIcons },
+            icon = Icons.Default.CalendarMonth,
             contentDescription = "Abfahrtsdatum wählen",
             testTag = "route_departure_date",
             onClick = onDateClick,
-        )
-        Spacer(Modifier.width(6.dp))
-        PlannerTimeChip(
-            text = departure.format(routeTimeFormatter),
-            icon = Icons.Default.Schedule.takeIf { showChipIcons },
-            contentDescription = "Abfahrtszeit wählen",
-            testTag = "route_departure_time",
-            onClick = onTimeClick,
         )
     }
 }
@@ -698,18 +784,167 @@ private fun PlannerTimeChip(
 }
 
 @Composable
+private fun SpeedRow(
+    speedKnots: Double,
+    enabled: Boolean,
+    onSpeedChanged: (Double) -> Unit,
+) {
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val rowBg = if (isDark) Color(0xFF0F172A) else Color(0xFFF5F6FA).copy(alpha = 0.9f)
+
+    BoxWithConstraints(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(rowBg)
+                .padding(12.dp),
+    ) {
+        val stackControls = maxWidth < 330.dp
+        if (stackControls) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SpeedLabel()
+                SpeedControls(
+                    speedKnots = speedKnots,
+                    enabled = enabled,
+                    onSpeedChanged = onSpeedChanged,
+                    modifier = Modifier.align(Alignment.End),
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SpeedLabel(modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
+                SpeedControls(
+                    speedKnots = speedKnots,
+                    enabled = enabled,
+                    onSpeedChanged = onSpeedChanged,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpeedLabel(modifier: Modifier = Modifier) {
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val labelColor = if (isDark) Color(0xFFF8FAFC) else TideNodeInk
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(TideNodeBlue),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.Speed, contentDescription = null, tint = Color.White)
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            "Reisegeschwindigkeit",
+            color = labelColor,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun SpeedControls(
+    speedKnots: Double,
+    enabled: Boolean,
+    onSpeedChanged: (Double) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val controlBg = if (isDark) Color(0xFF1E293B) else Color.White
+    val disabledBg = if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)
+    val controlTint = if (isDark) Color(0xFF60A5FA) else TideNodeBlue
+    val valueColor = if (isDark) Color(0xFFF8FAFC) else TideNodeInk
+    val canDecrease = enabled && speedKnots > MIN_PLANNING_SPEED_KNOTS
+    val canIncrease = enabled && speedKnots < MAX_PLANNING_SPEED_KNOTS
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
+            onClick = {
+                onSpeedChanged(
+                    (speedKnots - PLANNING_SPEED_STEP_KNOTS)
+                        .coerceIn(MIN_PLANNING_SPEED_KNOTS, MAX_PLANNING_SPEED_KNOTS),
+                )
+            },
+            enabled = canDecrease,
+            modifier =
+                Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(if (canDecrease) controlBg else disabledBg)
+                    .testTag("route_speed_decrease"),
+        ) {
+            Icon(
+                Icons.Default.Remove,
+                contentDescription = "Reisegeschwindigkeit verringern",
+                tint = if (canDecrease) controlTint else controlTint.copy(alpha = 0.35f),
+            )
+        }
+        Text(
+            text = String.format(Locale.GERMANY, "%.1f kn", speedKnots),
+            modifier = Modifier.width(78.dp).testTag("route_speed_value"),
+            color = valueColor,
+            fontWeight = FontWeight.ExtraBold,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            maxLines = 1,
+        )
+        IconButton(
+            onClick = {
+                onSpeedChanged(
+                    (speedKnots + PLANNING_SPEED_STEP_KNOTS)
+                        .coerceIn(MIN_PLANNING_SPEED_KNOTS, MAX_PLANNING_SPEED_KNOTS),
+                )
+            },
+            enabled = canIncrease,
+            modifier =
+                Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(if (canIncrease) controlBg else disabledBg)
+                    .testTag("route_speed_increase"),
+        ) {
+            Icon(
+                Icons.Default.Add,
+                contentDescription = "Reisegeschwindigkeit erhöhen",
+                tint = if (canIncrease) controlTint else controlTint.copy(alpha = 0.35f),
+            )
+        }
+    }
+}
+
+@Composable
 private fun PassageWindowCard(
     uiState: RoutePlanningUiState,
-    onRefresh: () -> Unit,
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val cardBg = if (isDark) Color(0xFF1E293B) else Color.White
     val cardBorder = if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)
     val titleColor = if (isDark) Color(0xFF60A5FA) else TideNodeBlue
     val subtitleColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF73777D)
-    val refreshTint = if (isDark) Color(0xFF60A5FA) else TideNodeInk
+    val resultBg = if (isDark) Color(0xFF0F172A) else Color(0xFFF5F7FB)
+    val valueColor = if (isDark) Color(0xFFF8FAFC) else TideNodeInk
+    val errorColor = if (isDark) Color(0xFFFCA5A5) else Color(0xFFB42318)
 
-    Row(
+    Column(
         modifier =
             Modifier
                 .fillMaxWidth()
@@ -718,68 +953,263 @@ private fun PassageWindowCard(
                 .border(1.dp, cardBorder, RoundedCornerShape(26.dp))
                 .padding(18.dp)
                 .testTag("route_passage_window"),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(Icons.Default.Schedule, null, tint = titleColor)
-        Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "Sichere Passagefenster",
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Schedule, contentDescription = null, tint = titleColor)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "Abfahrtsfenster",
+                modifier = Modifier.weight(1f),
+                color = titleColor,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 17.sp,
+            )
+            if (uiState.isWorking) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
                     color = titleColor,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 17.sp,
                 )
-                Spacer(Modifier.height(4.dp))
-                if (uiState.isSearchingPassageWindow) {
-                    Text("Wird berechnet…", color = subtitleColor)
-                } else if (uiState.passageWindows.isEmpty()) {
+            }
+        }
+
+        when {
+            uiState.isWorking -> {
+                Text(
+                    text =
+                        if (uiState.isSearchingPassageWindow) {
+                            "Passagefenster wird berechnet…"
+                        } else {
+                            "Route, Fahrzeit und Ankunft werden berechnet…"
+                        },
+                    modifier = Modifier.testTag("route_passage_loading"),
+                    color = subtitleColor,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            uiState.error != null -> {
+                Text(
+                    text = uiState.error,
+                    modifier = Modifier.testTag("route_passage_error"),
+                    color = errorColor,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            !uiState.hasCalculatedResult -> {
+                Text(
+                    text =
+                        if (uiState.hasCompleteRouteInput) {
+                            "Noch nicht berechnet. Starte die Törnplanung mit der Schaltfläche unten."
+                        } else {
+                            "Wähle Start- und Zielhafen, um den Törn zu berechnen."
+                        },
+                    modifier = Modifier.testTag("route_passage_neutral"),
+                    color = subtitleColor,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            uiState.passageWindows.isEmpty() -> {
+                Text(
+                    "Für den gewählten Abfahrtstag wurde kein sicheres Abfahrtsfenster gefunden.",
+                    modifier = Modifier.testTag("route_passage_empty"),
+                    color = subtitleColor,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                RouteDepthDetails(
+                    uiState = uiState,
+                    labelColor = subtitleColor,
+                    valueColor = valueColor,
+                )
+            }
+
+            else -> {
+                val primaryWindow = uiState.passageWindow ?: uiState.passageWindows.first()
+                val alternatives = uiState.passageWindows.filterNot { it == primaryWindow }
+                val selectedDepartureDate = uiState.departure.toLocalDate()
+
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(resultBg)
+                            .border(1.dp, cardBorder, RoundedCornerShape(18.dp))
+                            .padding(14.dp)
+                            .testTag("route_passage_result"),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     Text(
-                        "Für diesen Tag liegt kein sicheres Passagefenster vor.",
+                        "MÖGLICHE ABFAHRT",
                         color = subtitleColor,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
                     )
-                } else {
-                    uiState.passageWindows.forEach { window ->
-                        Column(Modifier.padding(vertical = 4.dp)) {
-                            Text(
-                                "${window.start.format(routeTimeFormatter)} – ${window.end.format(routeTimeFormatter)} Uhr",
-                                color = subtitleColor,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            window.anchoredHighWater?.let { hw ->
-                                Text(
-                                    "Wattenhoch: ${hw.format(routeTimeFormatter)} Uhr",
-                                    color = titleColor.copy(alpha = 0.8f),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
+                    Text(
+                        primaryWindow.formatRange(selectedDepartureDate),
+                        color = valueColor,
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
+
+                    primaryWindow.recommendedDeparture?.let { recommended ->
+                        PlannerResultLine(
+                            label = "Empfohlene Abfahrt",
+                            value = recommended.formatTimeWithOptionalDate(selectedDepartureDate),
+                            labelColor = subtitleColor,
+                            valueColor = titleColor,
+                        )
+                    }
+                    primaryWindow.anchoredHighWater?.let { highWater ->
+                        PlannerResultLine(
+                            label = "HW-Referenz",
+                            value = highWater.formatTimeWithOptionalDate(selectedDepartureDate),
+                            labelColor = subtitleColor,
+                            valueColor = valueColor,
+                        )
+                    }
+
+                    RouteDepthDetails(
+                        uiState = uiState,
+                        labelColor = subtitleColor,
+                        valueColor = valueColor,
+                        fallbackBottleneck = primaryWindow.bottleneckName,
+                    )
+
+                    PlannerResultLine(
+                        label = "Datenqualität",
+                        value = primaryWindow.waterLevelQuality.toDisplayText(),
+                        labelColor = subtitleColor,
+                        valueColor = valueColor,
+                    )
+                    primaryWindow.waterLevelDetail?.let { detail ->
+                        Text(
+                            detail,
+                            color = subtitleColor,
+                            fontSize = 12.sp,
+                        )
                     }
                 }
-                uiState.passageWindows.firstOrNull()?.bottleneckName?.let {
+
+                if (alternatives.isNotEmpty()) {
                     Text(
-                        "Engstelle: $it",
-                        color = subtitleColor,
-                        fontSize = 12.sp,
+                        "Alternative Zeitfenster (${alternatives.size})",
+                        color = titleColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
                     )
+                    alternatives.forEach { window ->
+                        val showDate = window.start.toLocalDate() != primaryWindow.start.toLocalDate()
+                        Text(
+                            text =
+                                buildString {
+                                    if (showDate) {
+                                        append(window.start.format(routeDateFormatter))
+                                        append(", ")
+                                    }
+                                    append(window.start.format(routeTimeFormatter))
+                                    append(" – ")
+                                    append(window.end.format(routeTimeFormatter))
+                                    append(" Uhr")
+                                },
+                            color = subtitleColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
-            }
-        if (uiState.isSearchingPassageWindow) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                strokeWidth = 2.dp,
-                color = titleColor,
-            )
-        } else {
-            IconButton(
-                onClick = onRefresh,
-                enabled = uiState.hasCompleteRouteInput,
-            ) {
-                Icon(Icons.Default.Refresh, "Passagefenster aktualisieren", tint = refreshTint)
             }
         }
     }
+}
+
+@Composable
+private fun RouteDepthDetails(
+    uiState: RoutePlanningUiState,
+    labelColor: Color,
+    valueColor: Color,
+    fallbackBottleneck: String? = null,
+) {
+    val metrics = uiState.routeMetrics ?: return
+    metrics.worstUnderKeelClearanceMeters?.let { clearance ->
+        PlannerResultLine(
+            label = "Geringste WuK",
+            value = String.format(Locale.GERMANY, "%.2f m", clearance),
+            labelColor = labelColor,
+            valueColor = valueColor,
+        )
+    }
+    (metrics.worstClearanceName ?: fallbackBottleneck)?.let { bottleneck ->
+        PlannerResultLine(
+            label = "Engstelle",
+            value = bottleneck,
+            labelColor = labelColor,
+            valueColor = valueColor,
+        )
+    }
+}
+
+@Composable
+private fun PlannerResultLine(
+    label: String,
+    value: String,
+    labelColor: Color,
+    valueColor: Color,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            color = labelColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            value,
+            modifier = Modifier.weight(1f),
+            color = valueColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+        )
+    }
+}
+
+private fun WaterLevelQuality.toDisplayText(): String =
+    when (this) {
+        WaterLevelQuality.LOCAL_OFFICIAL -> "Lokale amtliche Daten"
+        WaterLevelQuality.MANUAL -> "Manuelle Korrektur"
+        WaterLevelQuality.CONFIRMED_COMPARISON -> "Bestätigter Vergleichspegel"
+        WaterLevelQuality.STALE -> "Veraltete Prognose"
+        WaterLevelQuality.OUTSIDE_FORECAST_HORIZON -> "Astronomische Gezeitendaten"
+        WaterLevelQuality.UNAVAILABLE -> "Nicht verfügbar"
+    }
+
+private fun PassageWindow.formatRange(referenceDate: LocalDate): String {
+    val startText = start.formatTimeWithOptionalDate(referenceDate, includeSuffix = false)
+    val endReferenceDate = if (end.toLocalDate() == start.toLocalDate()) end.toLocalDate() else referenceDate
+    val endText = end.formatTimeWithOptionalDate(endReferenceDate, includeSuffix = false)
+    return "$startText – $endText Uhr"
+}
+
+private fun ZonedDateTime.formatTimeWithOptionalDate(
+    referenceDate: LocalDate,
+    includeSuffix: Boolean = true,
+): String {
+    val formatted =
+        if (toLocalDate() == referenceDate) {
+            format(routeTimeFormatter)
+        } else {
+            "${format(routeDateFormatter)}, ${format(routeTimeFormatter)}"
+        }
+    return if (includeSuffix) "$formatted Uhr" else formatted
 }
 
 @Composable
@@ -845,6 +1275,8 @@ private fun IntermediateStopsPicker(
                             interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                             indication = null,
                         ) { /* consume clicks so they don't close */ }
+                        .navigationBarsPadding()
+                        .imePadding()
                         .padding(16.dp)
                         .testTag("intermediate_stops_picker"),
             ) {

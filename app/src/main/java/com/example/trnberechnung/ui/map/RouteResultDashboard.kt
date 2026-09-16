@@ -10,7 +10,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,19 +28,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CompassCalibration
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.CompassCalibration
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Route
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.Warning
@@ -47,7 +48,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -96,9 +96,10 @@ enum class RouteDashboardMode {
 fun RouteResultDashboard(
     state: RoutePlanningUiState,
     onOpenNauti: () -> Unit,
-    onRefreshPassageWindow: () -> Unit,
     onStartNavigation: () -> Unit,
     onSave: () -> Unit,
+    onEdit: () -> Unit,
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var mode by rememberSaveable { mutableStateOf(RouteDashboardMode.FULL) }
@@ -112,9 +113,10 @@ fun RouteResultDashboard(
         mode = mode,
         onModeChange = { mode = it },
         onOpenNauti = onOpenNauti,
-        onRefreshPassageWindow = onRefreshPassageWindow,
         onNavigate = onStartNavigation,
         onSave = onSave,
+        onEdit = onEdit,
+        onCancel = onCancel,
         modifier = modifier,
     )
 }
@@ -127,6 +129,8 @@ fun RouteResultDashboard(
     onOpenNauti: () -> Unit,
     onNavigate: () -> Unit,
     onSave: () -> Unit,
+    onEdit: () -> Unit,
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -135,9 +139,10 @@ fun RouteResultDashboard(
         mode = mode,
         onModeChange = onModeChange,
         onOpenNauti = onOpenNauti,
-        onRefreshPassageWindow = viewModel::refreshPassageWindow,
         onNavigate = onNavigate,
         onSave = onSave,
+        onEdit = onEdit,
+        onCancel = onCancel,
         modifier = modifier,
     )
 }
@@ -148,9 +153,10 @@ private fun RouteResultDashboardContent(
     mode: RouteDashboardMode,
     onModeChange: (RouteDashboardMode) -> Unit,
     onOpenNauti: () -> Unit,
-    onRefreshPassageWindow: () -> Unit,
     onNavigate: () -> Unit,
     onSave: () -> Unit,
+    onEdit: () -> Unit,
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isWorking = uiState.isCalculating || uiState.isSearchingPassageWindow
@@ -203,10 +209,7 @@ private fun RouteResultDashboardContent(
             )
 
             if (mode != RouteDashboardMode.COMPACT) {
-                DashboardPassageRow(
-                    uiState = uiState,
-                    onRefresh = onRefreshPassageWindow,
-                )
+                DashboardPassageRow(uiState = uiState)
                 DashboardMetrics(uiState)
             }
 
@@ -224,6 +227,8 @@ private fun RouteResultDashboardContent(
                     uiState = uiState,
                     onNavigate = onNavigate,
                     onSave = onSave,
+                    onEdit = onEdit,
+                    onCancel = onCancel,
                 )
             }
         }
@@ -392,7 +397,6 @@ private fun NautiDashboardRow(
 @Composable
 private fun DashboardPassageRow(
     uiState: RoutePlanningUiState,
-    onRefresh: () -> Unit,
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val rowBg = if (isDark) Color(0xFF1E293B).copy(alpha = 0.70f) else Color.White.copy(alpha = 0.32f)
@@ -407,7 +411,7 @@ private fun DashboardPassageRow(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(22.dp))
                 .background(rowBg)
-                .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+                .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -460,14 +464,6 @@ private fun DashboardPassageRow(
                 color = iconTint,
                 strokeWidth = 2.dp,
             )
-            Spacer(Modifier.width(10.dp))
-        } else {
-            IconButton(
-                onClick = onRefresh,
-                enabled = uiState.hasCompleteRouteInput,
-            ) {
-                Icon(Icons.Default.Refresh, "Passagefenster aktualisieren", tint = iconTint)
-            }
         }
     }
 }
@@ -640,48 +636,176 @@ private fun DashboardActions(
     uiState: RoutePlanningUiState,
     onNavigate: () -> Unit,
     onSave: () -> Unit,
+    onEdit: () -> Unit,
+    onCancel: () -> Unit,
 ) {
-    val routeAvailable = uiState.routeMetrics != null || uiState.hasCompleteRouteInput
-    val navigationEnabled = uiState.hasCompleteRouteInput || uiState.routeMetrics != null
+    val resultAvailable = uiState.hasCalculatedResult && uiState.routeMetrics != null
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        if (maxWidth < 320.dp) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                DashboardSaveButton(
+                    enabled = resultAvailable,
+                    onClick = onSave,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                DashboardNavigationButton(
+                    enabled = resultAvailable,
+                    onClick = onNavigate,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                DashboardEditButton(
+                    enabled = resultAvailable,
+                    onClick = onEdit,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                DashboardCancelButton(
+                    enabled = resultAvailable,
+                    onClick = onCancel,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    DashboardSaveButton(
+                        enabled = resultAvailable,
+                        onClick = onSave,
+                        modifier = Modifier.weight(1f),
+                    )
+                    DashboardNavigationButton(
+                        enabled = resultAvailable,
+                        onClick = onNavigate,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    DashboardEditButton(
+                        enabled = resultAvailable,
+                        onClick = onEdit,
+                        modifier = Modifier.weight(1f),
+                    )
+                    DashboardCancelButton(
+                        enabled = resultAvailable,
+                        onClick = onCancel,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardSaveButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.heightIn(min = 50.dp).testTag("route_dashboard_save"),
+        shape = RoundedCornerShape(26.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor = TideNodeBlue,
+                contentColor = Color.White,
+                disabledContainerColor = TideNodeBlue.copy(alpha = 0.5f),
+                disabledContentColor = Color.White.copy(alpha = 0.6f),
+            ),
     ) {
-        Button(
-            onClick = onSave,
-            enabled = routeAvailable,
-            modifier = Modifier.weight(1f).height(50.dp).testTag("route_dashboard_save"),
-            shape = RoundedCornerShape(26.dp),
-            colors =
-                ButtonDefaults.buttonColors(
-                    containerColor = TideNodeBlue,
-                    contentColor = Color.White,
-                    disabledContainerColor = TideNodeBlue.copy(alpha = 0.5f),
-                    disabledContentColor = Color.White.copy(alpha = 0.6f),
-                ),
-        ) {
-            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Speichern", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
-        }
-        Button(
-            onClick = onNavigate,
-            enabled = navigationEnabled,
-            modifier = Modifier.weight(1f).height(50.dp).testTag("route_dashboard_navigation"),
-            shape = RoundedCornerShape(26.dp),
-            colors =
-                ButtonDefaults.buttonColors(
-                    containerColor = TideNodeCyan,
-                    contentColor = Color.White,
-                    disabledContainerColor = TideNodeCyan.copy(alpha = 0.5f),
-                    disabledContentColor = Color.White.copy(alpha = 0.6f),
-                ),
-        ) {
-            Icon(Icons.Default.Explore, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Fahrt starten", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
-        }
+        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Speichern", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun DashboardNavigationButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.heightIn(min = 50.dp).testTag("route_dashboard_navigation"),
+        shape = RoundedCornerShape(26.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor = TideNodeCyan,
+                contentColor = Color.White,
+                disabledContainerColor = TideNodeCyan.copy(alpha = 0.5f),
+                disabledContentColor = Color.White.copy(alpha = 0.6f),
+            ),
+    ) {
+        Icon(Icons.Default.Explore, contentDescription = null, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Fahrt starten", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun DashboardEditButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.heightIn(min = 48.dp).testTag("route_dashboard_edit"),
+        shape = RoundedCornerShape(24.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor = TideNodeBlue.copy(alpha = 0.14f),
+                contentColor = TideNodeBlue,
+                disabledContainerColor = TideNodeBlue.copy(alpha = 0.06f),
+                disabledContentColor = TideNodeBlue.copy(alpha = 0.4f),
+            ),
+    ) {
+        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(19.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Bearbeiten", fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun DashboardCancelButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.heightIn(min = 48.dp).testTag("route_dashboard_cancel"),
+        shape = RoundedCornerShape(24.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor = TideNodeDanger.copy(alpha = 0.12f),
+                contentColor = TideNodeDanger,
+                disabledContainerColor = TideNodeDanger.copy(alpha = 0.05f),
+                disabledContentColor = TideNodeDanger.copy(alpha = 0.4f),
+            ),
+    ) {
+        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(19.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Abbrechen", fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
     }
 }
 

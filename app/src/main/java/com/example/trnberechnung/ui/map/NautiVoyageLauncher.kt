@@ -69,15 +69,15 @@ class NautiVoyageLauncher(
         planning.selectDestination(destination)
         planning.addIntermediateStops(stops)
         action.departure?.let(planning::updateDeparture)
+        planning.calculateRoute()
 
-        // `calculateCurrentRoute()` flips isCalculating to true synchronously inside
-        // selectDestination, so the flag is already set when this wait begins. The extra condition on
-        // routeMetrics/error is what makes it robust: updateDeparture and addIntermediateStops return
-        // early when nothing changed, so `!isCalculating` alone could match the pre-calculation state.
+        // Planning input changes are deliberately side-effect free. The single explicit calculation
+        // above owns geometry, safety and passage-window work; wait until that complete result (or an
+        // error) settles before applying the navigation gates.
         val settled =
             withTimeoutOrNull(timeoutMillis) {
                 planning.uiState.first { state ->
-                    !state.isCalculating && (state.routeMetrics != null || state.error != null)
+                    !state.isWorking && (state.hasCalculatedResult || state.error != null)
                 }
             }
                 ?: return VoyagePreflightResult(

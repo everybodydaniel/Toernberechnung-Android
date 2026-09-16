@@ -2,7 +2,9 @@
 
 package com.example.trnberechnung.ui.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,10 +54,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.trnberechnung.navigation.ActiveVoyageManager
 import com.example.trnberechnung.navigation.ActiveVoyageSession
@@ -112,7 +116,7 @@ fun FullScreenNavigationScreen(
     val session = (voyageState as? ActiveVoyageState.Active)?.session
 
     if (session == null) {
-        androidx.compose.runtime.SideEffect {
+        LaunchedEffect(Unit) {
             onMinimize()
         }
         Box(modifier.fillMaxSize())
@@ -146,8 +150,19 @@ private fun ActiveNavigationContent(
     var followHeading by remember(session.id) { mutableStateOf(true) }
     var showFinishConfirmation by remember { mutableStateOf(false) }
     var isFinishing by remember { mutableStateOf(false) }
+    var isMinimizing by remember(session.id) { mutableStateOf(false) }
     var finishError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+
+    fun minimizeOnce() {
+        if (isMinimizing) return
+        isMinimizing = true
+        onMinimize()
+    }
+
+    BackHandler(enabled = !showFinishConfirmation && !isMinimizing) {
+        minimizeOnce()
+    }
 
     LaunchedEffect(session.id) {
         while (true) {
@@ -199,7 +214,10 @@ private fun ActiveNavigationContent(
                 validFix?.let {
                     LatLng(it.coordinate.latitude, it.coordinate.longitude)
                 },
-            headingDegrees = heading?.trueHeadingDegrees,
+            // Keep the navigation chart north-up. A non-zero MapLibre camera bearing crashes the
+            // native raster renderer on affected Android GL drivers; heading calculations and the
+            // navigation dashboard remain unchanged.
+            headingDegrees = null,
             followLocation = followHeading && validFix != null,
             modifier = Modifier.fillMaxSize(),
         )
@@ -221,12 +239,13 @@ private fun ActiveNavigationContent(
         NavigationTopBar(
             routeTitle = session.route.title,
             elapsed = display.elapsed,
-            onMinimize = onMinimize,
+            onMinimize = ::minimizeOnce,
             modifier =
                 Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .zIndex(NAVIGATION_CONTROL_Z_INDEX),
         )
 
         HeadingFollowButton(
@@ -278,7 +297,7 @@ private fun ActiveNavigationContent(
                                     if (completed != null) {
                                         onVoyageFinished(completed)
                                     } else {
-                                        onMinimize()
+                                        minimizeOnce()
                                     }
                                 }.onFailure { error ->
                                     finishError =
@@ -662,15 +681,21 @@ private fun DarkCircularButton(
     Box(
         modifier =
             modifier
-                .size(44.dp)
-                .tideNodeDarkGlass(cornerRadius = 22.dp, elevation = 8.dp),
+                .size(MINIMUM_TOUCH_TARGET)
+                .tideNodeDarkGlass(cornerRadius = 24.dp, elevation = 8.dp)
+                .clickable(
+                    onClick = onClick,
+                    onClickLabel = contentDescription,
+                    role = Role.Button,
+                ),
         contentAlignment = Alignment.Center,
     ) {
-        IconButton(onClick = onClick) {
-            Icon(icon, contentDescription, tint = Color.White)
-        }
+        Icon(icon, contentDescription, tint = Color.White)
     }
 }
+
+private val MINIMUM_TOUCH_TARGET = 48.dp
+private const val NAVIGATION_CONTROL_Z_INDEX = 3f
 
 
 

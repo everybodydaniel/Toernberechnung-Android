@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -19,11 +20,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -77,7 +76,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -101,14 +99,13 @@ import java.util.Locale
  *   the same list the Revier screen renders is what keeps a widget from disagreeing with the tab it
  *   links to.
  * @param onOpenRevier opens the Revier tab on the harbour a widget is showing.
- * @param tabletExpandedHeight height already bounded by the map overlays and system insets.
+ * The caller bounds the expanded panel between the map's top and bottom overlays.
  */
 @Composable
 fun NautiDrawer(
     viewModel: NautiViewModel,
     stations: List<TideStationData>,
     onOpenRevier: (String?) -> Unit,
-    tabletExpandedHeight: Dp? = null,
     modifier: Modifier = Modifier,
 ) {
     val adaptiveLayout = currentAdaptiveLayout()
@@ -128,21 +125,17 @@ fun NautiDrawer(
         NautiPanelMode.CHAT,
         NautiPanelMode.HISTORY,
         -> {
-            val expandedSizeModifier =
-                if (adaptiveLayout.isTablet && tabletExpandedHeight != null) {
-                    Modifier
-                        .fillMaxWidth()
-                        .height(tabletExpandedHeight)
+            BackHandler {
+                if (uiState.mode == NautiPanelMode.HISTORY) {
+                    viewModel.showChat()
                 } else {
-                    Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(0.76f)
-                        .heightIn(min = 420.dp)
+                    viewModel.showCompact()
                 }
+            }
             Column(
                 modifier =
                     modifier
-                        .then(expandedSizeModifier)
+                        .fillMaxSize()
                         .tideNodeGlass(cornerRadius = 30.dp, elevation = 16.dp, alpha = 0.80f)
                         .testTag("NautiInlinePanel"),
             ) {
