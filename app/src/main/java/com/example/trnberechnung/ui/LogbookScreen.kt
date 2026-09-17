@@ -39,15 +39,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.trnberechnung.model.LogbookEntry
-import com.example.trnberechnung.ui.theme.*
+import com.example.trnberechnung.ui.components.tideNodeGlass
 import com.example.trnberechnung.viewmodel.TideViewModel
-
-private val LogbookBlue = Color(0xFF0040DD)
-private val LogbookBlueBg = Color(0xFF1A2E55)
-private val LogbookChipBorder = Color(0xFF2A4070)
-private val LogbookCardBg = Color(0xFF1B2838)
-private val LogbookSubCardBg = Color(0xFF162030)
-private val LogbookFieldBorder = Color(0xFF2A3A4E)
 
 internal val CHECKLIST_CREW = listOf(
     "Einweisung der Crew",
@@ -86,12 +79,12 @@ fun LogbookScreen(
     logToDelete?.let { entry ->
         AlertDialog(
             onDismissRequest = { logToDelete = null },
-            containerColor = NauticalSurface,
-            title = { Text("Eintrag löschen?", color = NauticalTextPrimary) },
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text("Eintrag löschen?", color = MaterialTheme.colorScheme.onSurface) },
             text = {
                 Text(
                     "\"${entry.routeDesc}\" vom ${entry.date} wirklich löschen?",
-                    color = NauticalTextSecondary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
@@ -99,11 +92,11 @@ fun LogbookScreen(
                     viewModel.deleteLog(entry)
                     logToDelete = null
                     Toast.makeText(context, "Eintrag gelöscht", Toast.LENGTH_SHORT).show()
-                }) { Text("Löschen", color = NauticalNoGo) }
+                }) { Text("Löschen", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { logToDelete = null }) {
-                    Text("Abbrechen", color = NauticalTextSecondary)
+                    Text("Abbrechen", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         )
@@ -390,10 +383,16 @@ private fun LogbookOverviewCard(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = LogbookCardBg),
-        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 22.dp else 16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .tideNodeGlass(
+                    cornerRadius = if (adaptiveLayout.isTablet) TabletLayoutTokens.CardCornerRadius else 24.dp,
+                    elevation = if (adaptiveLayout.isTablet) 10.dp else 7.dp,
+                ),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) TabletLayoutTokens.CardCornerRadius else 24.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(if (adaptiveLayout.isTablet) 22.dp else 16.dp)) {
 
@@ -401,10 +400,17 @@ private fun LogbookOverviewCard(
                 Box(
                     modifier = Modifier
                         .size(if (adaptiveLayout.isTablet) 54.dp else 44.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(LogbookBlueBg),
+                        .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 16.dp else 14.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
-                ) { Text("📘", fontSize = 22.sp) }
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(if (adaptiveLayout.isTablet) 28.dp else 23.dp),
+                    )
+                }
 
                 Spacer(modifier = Modifier.width(12.dp))
 
@@ -422,7 +428,7 @@ private fun LogbookOverviewCard(
                         fontSize =
                             if (adaptiveLayout.isTablet) 20.sp else MaterialTheme.typography.titleMedium.fontSize,
                         fontWeight = FontWeight.Bold,
-                        color = NauticalTextPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
@@ -430,7 +436,7 @@ private fun LogbookOverviewCard(
                         style = MaterialTheme.typography.bodyMedium,
                         fontSize =
                             if (adaptiveLayout.isTablet) 17.sp else MaterialTheme.typography.bodyMedium.fontSize,
-                        color = NauticalTextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
@@ -439,7 +445,7 @@ private fun LogbookOverviewCard(
                     modifier = Modifier.size(if (adaptiveLayout.isTablet) 48.dp else 32.dp),
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = "Löschen",
-                         tint = NauticalTextSecondary,
+                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                          modifier = Modifier.size(if (adaptiveLayout.isTablet) 22.dp else 18.dp))
                 }
             }
@@ -452,7 +458,7 @@ private fun LogbookOverviewCard(
                 SummaryChip(icon = "⏱", text = log.duration)
                 SummaryChip(icon = "✓", text = formatStatus(log.status),
                             isStatus = true,
-                            isGo = log.status.contains("GO") && !log.status.contains("NO-GO"))
+                            isGo = isPositiveStatus(log.status))
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -525,8 +531,9 @@ private fun LogbookOverviewCard(
                     )
 
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = LogbookSubCardBg),
-                        shape = RoundedCornerShape(12.dp)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -534,12 +541,12 @@ private fun LogbookOverviewCard(
                                     checked = data.aufbauhoeheActive,
                                     onCheckedChange = { persist(data.copy(aufbauhoeheActive = it)) },
                                     colors = CheckboxDefaults.colors(
-                                        checkedColor = NauticalPrimary,
-                                        uncheckedColor = NauticalTextSecondary
+                                        checkedColor = MaterialTheme.colorScheme.primary,
+                                        uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 )
                                 Spacer(Modifier.width(4.dp))
-                                Text("Aufbauhöhe angeben", color = NauticalTextPrimary,
+                                Text("Aufbauhöhe angeben", color = MaterialTheme.colorScheme.onSurface,
                                      fontWeight = FontWeight.Medium)
                             }
                             if (data.aufbauhoeheActive) {
@@ -558,8 +565,9 @@ private fun LogbookOverviewCard(
                     }
 
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = LogbookSubCardBg),
-                        shape = RoundedCornerShape(12.dp)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     ) {
                         Column(modifier = Modifier.padding(12.dp),
                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -567,7 +575,7 @@ private fun LogbookOverviewCard(
                                 Text("📋", fontSize = 16.sp)
                                 Spacer(Modifier.width(8.dp))
                                 Text("SONSTIGES",
-                                     color = NauticalTextSecondary, letterSpacing = 1.sp,
+                                     color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 1.sp,
                                      fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                             OutlinedTextField(
@@ -609,9 +617,10 @@ private fun LogbookOverviewCard(
                     Modifier
                         .fillMaxWidth()
                         .height(if (adaptiveLayout.isTablet) 60.dp else 48.dp),
-                shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 18.dp else 12.dp),
+                shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 30.dp else 24.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = LogbookBlue, contentColor = Color.White
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                 )
             ) {
                 Text("📄", fontSize = 16.sp)
@@ -635,16 +644,23 @@ private fun ExpanderRow(
     contentDescription: String? = null
 ) {
     val adaptiveLayout = currentAdaptiveLayout()
+    val shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 16.dp else 12.dp)
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = if (adaptiveLayout.isTablet) 56.dp else 48.dp) // Accessibility
-            .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 12.dp else 8.dp))
-            .clickable(
-                onClickLabel = contentDescription,
-                onClick = onClick
-            )
-            .padding(vertical = 8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = if (adaptiveLayout.isTablet) 56.dp else 48.dp)
+                .clip(shape)
+                .background(
+                    if (expanded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                    shape,
+                )
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+                .clickable(
+                    onClickLabel = contentDescription,
+                    onClick = onClick,
+                )
+                .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -658,12 +674,13 @@ private fun ExpanderRow(
             style = MaterialTheme.typography.bodyMedium,
             fontSize = if (adaptiveLayout.isTablet) 17.sp else MaterialTheme.typography.bodyMedium.fontSize,
             fontWeight = FontWeight.Medium,
-            color = NauticalPrimary,
+            color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f),
         )
         Icon(
             if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-            contentDescription = null, tint = NauticalTextSecondary
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
         )
     }
 }
@@ -679,27 +696,28 @@ private fun ChecklistSection(
     val adaptiveLayout = currentAdaptiveLayout()
     val checkedCount = states.count { it }
     Card(
-        colors = CardDefaults.cardColors(containerColor = LogbookSubCardBg),
-        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 16.dp else 12.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(if (adaptiveLayout.isTablet) 16.dp else 12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(modifier = Modifier.padding(if (adaptiveLayout.isTablet) 16.dp else 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(emoji, fontSize = 18.sp)
                 Spacer(Modifier.width(8.dp))
-                Text(title, color = NauticalTextSecondary, letterSpacing = 1.sp,
+                Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 1.sp,
                      fontWeight = FontWeight.Bold,
                      fontSize = if (adaptiveLayout.isTablet) 16.sp else 13.sp,
                      modifier = Modifier.weight(1f))
                 Text("$checkedCount / ${items.size}",
-                     color = NauticalTextSecondary,
+                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                      fontSize = if (adaptiveLayout.isTablet) 14.sp else 12.sp)
             }
             Spacer(Modifier.height(6.dp))
             LinearProgressIndicator(
                 progress = { if (items.isEmpty()) 0f else checkedCount / items.size.toFloat() },
                 modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                color = NauticalPrimary,
-                trackColor = LogbookFieldBorder
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.outlineVariant,
             )
             Spacer(Modifier.height(4.dp))
             items.forEachIndexed { i, label ->
@@ -717,14 +735,14 @@ private fun ChecklistSection(
                         checked = states[i],
                         onCheckedChange = { onToggle(i, it) },
                         colors = CheckboxDefaults.colors(
-                            checkedColor = NauticalPrimary,
-                            uncheckedColor = NauticalTextSecondary
+                            checkedColor = MaterialTheme.colorScheme.primary,
+                            uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
                         label,
-                        color = NauticalTextPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = if (adaptiveLayout.isTablet) 17.sp else LocalTextStyle.current.fontSize,
                         fontWeight = FontWeight.Medium,
                     )
@@ -740,22 +758,22 @@ private fun SummaryChip(
     isStatus: Boolean = false, isGo: Boolean = false
 ) {
     val adaptiveLayout = currentAdaptiveLayout()
-    val borderColor = when {
-        isStatus && isGo -> NauticalGo.copy(alpha = 0.5f)
-        isStatus -> NauticalNoGo.copy(alpha = 0.5f)
-        else -> LogbookChipBorder
-    }
-    val textColor = when {
-        isStatus && isGo -> NauticalGo
-        isStatus -> NauticalNoGo
-        else -> NauticalPrimary
-    }
+    val containerColor =
+        when {
+            isStatus && isGo -> MaterialTheme.colorScheme.primaryContainer
+            isStatus -> MaterialTheme.colorScheme.errorContainer
+            else -> MaterialTheme.colorScheme.surfaceVariant
+        }
+    val textColor =
+        when {
+            isStatus && isGo -> MaterialTheme.colorScheme.primary
+            isStatus -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = Color.Transparent,
-        border = ButtonDefaults.outlinedButtonBorder(true).copy(
-            brush = androidx.compose.ui.graphics.SolidColor(borderColor)
-        )
+        color = containerColor,
+        border = BorderStroke(1.dp, textColor.copy(alpha = 0.25f)),
     ) {
         Row(
             modifier =
@@ -782,15 +800,15 @@ private fun DetailField(label: String, value: String) {
     val adaptiveLayout = currentAdaptiveLayout()
     Column(
         modifier = Modifier.fillMaxWidth()
-            .border(1.dp, LogbookFieldBorder, RoundedCornerShape(12.dp))
-            .background(LogbookSubCardBg, RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
             .padding(
                 horizontal = if (adaptiveLayout.isTablet) 18.dp else 14.dp,
                 vertical = if (adaptiveLayout.isTablet) 14.dp else 10.dp,
             )
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall,
-             color = NauticalTextSecondary,
+             color = MaterialTheme.colorScheme.onSurfaceVariant,
              letterSpacing = 1.sp,
              fontSize = if (adaptiveLayout.isTablet) 13.sp else 11.sp)
         Spacer(modifier = Modifier.height(2.dp))
@@ -798,7 +816,7 @@ private fun DetailField(label: String, value: String) {
             value,
             style = MaterialTheme.typography.bodyLarge,
             fontSize = if (adaptiveLayout.isTablet) 18.sp else MaterialTheme.typography.bodyLarge.fontSize,
-            color = NauticalTextPrimary,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Medium,
         )
     }
@@ -806,20 +824,25 @@ private fun DetailField(label: String, value: String) {
 
 @Composable
 private fun textFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = NauticalTextPrimary,
-    unfocusedTextColor = NauticalTextPrimary,
-    focusedBorderColor = NauticalPrimary,
-    unfocusedBorderColor = LogbookFieldBorder,
-    focusedLabelColor = NauticalPrimary,
-    unfocusedLabelColor = NauticalTextSecondary,
-    cursorColor = NauticalPrimary
+    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+    focusedLabelColor = MaterialTheme.colorScheme.primary,
+    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    cursorColor = MaterialTheme.colorScheme.primary,
 )
 
 private fun formatStatus(status: String): String = when {
-    status.contains("GO ✓") || status == "GO" -> "Befahrbar"
     status.contains("NO-GO") -> "Nicht befahrbar"
+    status.contains("GO ✓") || status == "GO" -> "Befahrbar"
+    status.equals("completed", ignoreCase = true) -> "Abgeschlossen"
     else -> status
 }
+
+private fun isPositiveStatus(status: String): Boolean =
+    (status.contains("GO") && !status.contains("NO-GO")) ||
+        status.equals("completed", ignoreCase = true)
 
 internal data class LogbookDetails(
     val abfahrt: String = "",

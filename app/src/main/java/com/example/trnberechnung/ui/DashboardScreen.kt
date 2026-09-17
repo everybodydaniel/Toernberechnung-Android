@@ -6,7 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -65,7 +64,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -75,7 +73,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.trnberechnung.R
@@ -310,62 +307,57 @@ fun DashboardScreen(
 
             Spacer(Modifier.height(12.dp))
 
-            // 3 Numeric Fields Row (Tiefgang, Länge, UKC)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SettingsNumberBox(
-                    value = draft,
-                    onValueChange = {
-                        draft = it
-                        it.replace(',', '.').toFloatOrNull()?.let { v -> repo.draft = v }
-                    },
-                    icon = Icons.Default.ArrowDownward,
-                    label = "Tiefgang (m)",
-                    modifier = Modifier.weight(1f),
-                )
-                SettingsNumberBox(
-                    value = length,
-                    onValueChange = {
-                        length = it
-                        it.replace(',', '.').toFloatOrNull()?.let { v -> repo.length = v }
-                    },
-                    icon = Icons.Default.Straighten,
-                    label = "Länge (m)",
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            SettingsNumberBox(
+                value = draft,
+                onValueChange = {
+                    draft = it
+                    it.replace(',', '.').toFloatOrNull()?.let { v -> repo.draft = v }
+                },
+                icon = Icons.Default.ArrowDownward,
+                label = "Tiefgang (m)",
+                modifier = Modifier.testTag("boat_profile_draft"),
+            )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SettingsNumberBox(
-                    value = safetyMargin,
-                    onValueChange = {
-                        safetyMargin = it
-                        it.replace(',', '.').toFloatOrNull()?.let { v -> repo.safetyMargin = v }
-                    },
-                    icon = Icons.Default.Shield,
-                    label = "UKC (m)",
-                    modifier = Modifier.weight(1f),
-                )
-                SettingsNumberBox(
-                    value = waterLevelCorrection,
-                    onValueChange = {
-                        waterLevelCorrection = it
-                        it.replace(',', '.').toFloatOrNull()?.let { v -> repo.waterLevelCorrection = v }
-                    },
-                    icon = Icons.Default.Water,
-                    label = "Pegelkorrektur (m)",
-                    compactLabel = "Pegel ± (m)",
-                    accessibilityLabel = "Pegelkorrektur in Metern",
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            SettingsNumberBox(
+                value = length,
+                onValueChange = {
+                    length = it
+                    it.replace(',', '.').toFloatOrNull()?.let { v -> repo.length = v }
+                },
+                icon = Icons.Default.Straighten,
+                label = "Länge (m)",
+                modifier = Modifier.testTag("boat_profile_length"),
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            SettingsNumberBox(
+                value = safetyMargin,
+                onValueChange = {
+                    safetyMargin = it
+                    it.replace(',', '.').toFloatOrNull()?.let { v -> repo.safetyMargin = v }
+                },
+                icon = Icons.Default.Shield,
+                label = "Sicherheitsmarge (m)",
+                modifier = Modifier.testTag("boat_profile_safety_margin"),
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            SettingsNumberBox(
+                value = waterLevelCorrection,
+                onValueChange = {
+                    waterLevelCorrection = it
+                    it.replace(',', '.').toFloatOrNull()?.let { v -> repo.waterLevelCorrection = v }
+                },
+                icon = Icons.Default.Water,
+                label = "Pegelkorrektur (m)",
+                accessibilityLabel = "Pegelkorrektur in Metern",
+                allowNegative = true,
+                modifier = Modifier.testTag("boat_profile_water_level_correction"),
+            )
         }
 
         // ══════════════════════════════════════════════════
@@ -740,86 +732,67 @@ private fun SettingsNumberBox(
     icon: ImageVector,
     label: String,
     modifier: Modifier = Modifier,
-    compactLabel: String? = null,
     accessibilityLabel: String = label,
+    allowNegative: Boolean = false,
 ) {
     val adaptiveLayout = currentAdaptiveLayout()
-    val density = LocalDensity.current
-    val labelLineCount =
-        if (
-            (!adaptiveLayout.isTablet && density.fontScale > 1f) ||
-            (adaptiveLayout.isTablet && density.fontScale > 1.6f)
-        ) {
-            2
-        } else {
-            1
-        }
-    val baseFieldHeight = if (adaptiveLayout.isTablet) 68.dp else 56.dp
-    val textGroupHeight =
-        with(density) {
-            (if (adaptiveLayout.isTablet) 18.sp else 14.sp).toDp() * labelLineCount.toFloat() +
-                (if (adaptiveLayout.isTablet) 22.sp else 20.sp).toDp()
-        } + 10.dp
-    val fieldHeight = maxOf(baseFieldHeight, textGroupHeight)
-    Row(
-        modifier =
-            modifier
-                .height(fieldHeight)
-                .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp))
-                .background(SettingsInputBg)
-                .border(
-                    1.dp,
-                    SettingsInputBorder,
-                    RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp),
-                ).padding(horizontal = if (adaptiveLayout.isTablet) 14.dp else 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconBadge(icon, contentDescription = null)
-        Spacer(Modifier.width(8.dp))
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            fontSize = if (adaptiveLayout.isTablet) 14.sp else 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = SettingsSubtitle,
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(
             modifier =
                 Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = accessibilityLabel
-                    },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            textStyle =
-                LocalTextStyle.current.copy(
-                    color = SettingsTextColor,
-                    fontSize = if (adaptiveLayout.isTablet) 18.sp else 16.sp,
-                    lineHeight = if (adaptiveLayout.isTablet) 22.sp else 20.sp,
-                ),
-            cursorBrush = SolidColor(SettingsPrimaryBlue),
-            decorationBox = { innerTextField ->
-                BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val boxScope = this
-                    Column(
+                    .fillMaxWidth()
+                    .height(if (adaptiveLayout.isTablet) 64.dp else 52.dp)
+                    .clip(RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp))
+                    .background(SettingsInputBg)
+                    .border(
+                        1.dp,
+                        SettingsInputBorder,
+                        RoundedCornerShape(if (adaptiveLayout.isTablet) 20.dp else 16.dp),
+                    )
+                    .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconBadge(icon, contentDescription = null)
+            Spacer(Modifier.width(10.dp))
+            BasicTextField(
+                value = value,
+                onValueChange = { newValue ->
+                    if (allowNegative || '-' !in newValue) {
+                        onValueChange(newValue)
+                    }
+                },
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = accessibilityLabel
+                        },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                textStyle =
+                    LocalTextStyle.current.copy(
+                        color = SettingsTextColor,
+                        fontSize = if (adaptiveLayout.isTablet) 18.sp else 15.sp,
+                    ),
+                cursorBrush = SolidColor(SettingsPrimaryBlue),
+                decorationBox = { innerTextField ->
+                    Box(
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.Center,
+                        contentAlignment = Alignment.CenterStart,
                     ) {
-                        val useCompactLabel =
-                            compactLabel != null &&
-                                !adaptiveLayout.isTablet &&
-                                boxScope.maxWidth < 120.dp * LocalDensity.current.fontScale
-                        Text(
-                            text = if (useCompactLabel) compactLabel else label,
-                            color = SettingsSubtitle,
-                            fontSize = if (adaptiveLayout.isTablet) 15.sp else 11.sp,
-                            lineHeight = if (adaptiveLayout.isTablet) 18.sp else 14.sp,
-                            maxLines = labelLineCount,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.height(2.dp))
                         innerTextField()
                     }
-                }
-            },
-        )
+                },
+            )
+        }
     }
 }
 

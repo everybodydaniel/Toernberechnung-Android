@@ -104,6 +104,8 @@ private val routeDateFormatter =
     DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale.GERMANY)
 private val routeTimeFormatter =
     DateTimeFormatter.ofPattern("HH:mm", Locale.GERMANY)
+private val passageWindowRangeFormatter =
+    DateTimeFormatter.ofPattern("dd.MM.yyyy, HH:mm 'Uhr'", Locale.GERMANY)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1049,7 +1051,7 @@ private fun PassageWindowCard(
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        primaryWindow.formatRange(selectedDepartureDate),
+                        primaryWindow.formatRange(),
                         color = valueColor,
                         fontSize = 19.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -1102,19 +1104,8 @@ private fun PassageWindowCard(
                         fontSize = 13.sp,
                     )
                     alternatives.forEach { window ->
-                        val showDate = window.start.toLocalDate() != primaryWindow.start.toLocalDate()
                         Text(
-                            text =
-                                buildString {
-                                    if (showDate) {
-                                        append(window.start.format(routeDateFormatter))
-                                        append(", ")
-                                    }
-                                    append(window.start.format(routeTimeFormatter))
-                                    append(" – ")
-                                    append(window.end.format(routeTimeFormatter))
-                                    append(" Uhr")
-                                },
+                            text = window.formatRange(),
                             color = subtitleColor,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -1192,12 +1183,8 @@ private fun WaterLevelQuality.toDisplayText(): String =
         WaterLevelQuality.UNAVAILABLE -> "Nicht verfügbar"
     }
 
-private fun PassageWindow.formatRange(referenceDate: LocalDate): String {
-    val startText = start.formatTimeWithOptionalDate(referenceDate, includeSuffix = false)
-    val endReferenceDate = if (end.toLocalDate() == start.toLocalDate()) end.toLocalDate() else referenceDate
-    val endText = end.formatTimeWithOptionalDate(endReferenceDate, includeSuffix = false)
-    return "$startText – $endText Uhr"
-}
+internal fun PassageWindow.formatRange(): String =
+    "${start.format(passageWindowRangeFormatter)} – ${end.format(passageWindowRangeFormatter)}"
 
 private fun ZonedDateTime.formatTimeWithOptionalDate(
     referenceDate: LocalDate,

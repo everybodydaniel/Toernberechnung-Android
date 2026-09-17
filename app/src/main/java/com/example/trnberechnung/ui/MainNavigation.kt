@@ -3,6 +3,7 @@ package com.example.trnberechnung.ui
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -608,6 +609,7 @@ private fun TideNodeBottomNavigation(
     ) {
         bottomNavItems.forEach { screen ->
             val selected = currentRoute == screen.route
+            val interactionSource = remember(screen.route) { MutableInteractionSource() }
             Column(
                 modifier =
                     Modifier
@@ -626,6 +628,8 @@ private fun TideNodeBottomNavigation(
                             selected = selected,
                             onClick = { navController.navigateMainTab(screen.route) },
                             role = Role.Tab,
+                            interactionSource = interactionSource,
+                            indication = null,
                         )
                         .testTag("nav_${screen.route}"),
                 horizontalAlignment = Alignment.CenterHorizontally,
