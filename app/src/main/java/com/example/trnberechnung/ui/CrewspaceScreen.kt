@@ -1,5 +1,7 @@
 package com.example.trnberechnung.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -473,6 +475,7 @@ private fun PlanungTabContent(uiState: CrewspaceUiState, viewModel: CrewspaceVie
     val adaptiveLayout = currentAdaptiveLayout()
 
     var eventToEdit by remember { mutableStateOf<PlannerEvent?>(null) }
+    var externalActionLaunching by remember { mutableStateOf(false) }
 
     Column(
         modifier =
@@ -494,6 +497,7 @@ private fun PlanungTabContent(uiState: CrewspaceUiState, viewModel: CrewspaceVie
         DayDetailCard(
             selectedDate = uiState.selectedDate,
             events = eventsForDay,
+            crewMembers = uiState.crewMembers,
             onAddEvent = {
                 eventToEdit = PlannerEvent(startDate = uiState.selectedDate, endDate = uiState.selectedDate, title = "")
             },
@@ -505,50 +509,49 @@ private fun PlanungTabContent(uiState: CrewspaceUiState, viewModel: CrewspaceVie
     }
 
     val context = LocalContext.current
-    val shareEventExternally = { event: PlannerEvent ->
-        val dateFormatter = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy")
-        val shareText = buildString {
-            append("⚓ *TIDE NODE TERMIN* ⚓\n\n")
-            append("📍 *${event.title.uppercase()}*\n")
-            append("──────────────────\n")
-
-            if (event.startDate == event.endDate) {
-                append("📅 *Datum:* ${event.startDate.format(dateFormatter)}\n")
-            } else {
-                append("📅 *Zeitraum:* ${event.startDate.format(dateFormatter)} bis ${event.endDate.format(dateFormatter)}\n")
+    fun launchExternalAction(
+        event: PlannerEvent,
+        intent: Intent,
+        targetIntent: Intent,
+        unavailableMessage: String,
+    ) {
+        if (externalActionLaunching) return
+        when (plannerExternalActionStatus(event, context.canHandlePlannerIntent(targetIntent))) {
+            PlannerExternalActionStatus.INCOMPLETE_EVENT -> {
+                Toast.makeText(
+                    context,
+                    "Für diese Aktion fehlen gültige Termindaten.",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                return
             }
-
-            if (!event.startTime.isNullOrBlank()) {
-                append("⏰ *Zeit:* ${event.startTime}")
-                if (!event.endTime.isNullOrBlank()) append(" - ${event.endTime}")
-                append(" Uhr\n")
+            PlannerExternalActionStatus.NO_TARGET_APP -> {
+                Toast.makeText(context, unavailableMessage, Toast.LENGTH_SHORT).show()
+                return
             }
-
-            if (!event.location.isNullOrBlank()) {
-                append("🗺️ *Ort:* ${event.location}\n")
-            }
-
-            if (event.description.isNotBlank()) {
-                append("\n📝 *Details:*\n")
-                append(event.description)
-                append("\n")
-            }
-
-            append("──────────────────\n")
-            append("_Gesendet via Tide Node_")
+            PlannerExternalActionStatus.READY -> Unit
         }
-        val sendIntent = android.content.Intent().apply {
-            action = android.content.Intent.ACTION_SEND
-            putExtra(android.content.Intent.EXTRA_TEXT, shareText)
-            type = "text/plain"
+        externalActionLaunching = true
+        try {
+            context.startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(context, unavailableMessage, Toast.LENGTH_SHORT).show()
+        } catch (_: SecurityException) {
+            Toast.makeText(context, unavailableMessage, Toast.LENGTH_SHORT).show()
         }
-        val shareIntent = android.content.Intent.createChooser(sendIntent, "Termin teilen")
-        context.startActivity(shareIntent)
+    }
+
+    LaunchedEffect(externalActionLaunching) {
+        if (externalActionLaunching) {
+            kotlinx.coroutines.delay(700)
+            externalActionLaunching = false
+        }
     }
 
     if (eventToEdit != null) {
         EditPlannerEventBottomSheet(
             event = eventToEdit!!,
+            crewMembers = uiState.crewMembers.filter { it.isOnBoard },
             onDismiss = { eventToEdit = null },
             onSave = { updatedEvent ->
                 if (uiState.plannerEvents.any { it.id == updatedEvent.id }) {
@@ -562,7 +565,34 @@ private fun PlanungTabContent(uiState: CrewspaceUiState, viewModel: CrewspaceVie
                 viewModel.deletePlannerEvent(eventToEdit!!)
                 eventToEdit = null
             },
-            onExternalShare = { event -> shareEventExternally(event) }
+            onShare = { event ->
+                val participantNames = event.participantDisplayNames(uiState.crewMembers)
+                val shareIntent = plannerShareIntent(event, participantNames)
+                launchExternalAction(
+                    event,
+                    Intent.createChooser(shareIntent, "Termin teilen"),
+                    shareIntent,
+                    "Keine App zum Teilen verfügbar.",
+                )
+            },
+            onAddToCalendar = { event ->
+                val participantNames = event.participantDisplayNames(uiState.crewMembers)
+                val calendarIntent = plannerCalendarIntent(event, participantNames)
+                if (calendarIntent == null) {
+                    Toast.makeText(
+                        context,
+                        "Für den Kalender fehlen gültige Termindaten.",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    launchExternalAction(
+                        event,
+                        calendarIntent,
+                        calendarIntent,
+                        "Keine Kalender-App verfügbar.",
+                    )
+                }
+            },
         )
     }
 }
@@ -798,6 +828,7 @@ private fun CalendarCard(uiState: CrewspaceUiState, viewModel: CrewspaceViewMode
 private fun DayDetailCard(
     selectedDate: LocalDate,
     events: List<PlannerEvent>,
+    crewMembers: List<CrewMember>,
     onAddEvent: () -> Unit,
     onDeleteEvent: (PlannerEvent) -> Unit,
     onEventClick: (PlannerEvent) -> Unit
@@ -964,6 +995,18 @@ private fun DayDetailCard(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
+
+                                event.participantDisplayNames(crewMembers)
+                                    .takeIf { it.isNotEmpty() }
+                                    ?.let { names ->
+                                        Text(
+                                            text = "Dabei: ${names.joinToString(separator = ", ")}",
+                                            fontSize = if (adaptiveLayout.isTablet) 14.sp else 12.sp,
+                                            color = CrewspaceTextSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                             }
 
                             IconButton(

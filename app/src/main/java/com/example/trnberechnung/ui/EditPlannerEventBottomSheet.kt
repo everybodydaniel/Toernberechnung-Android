@@ -7,6 +7,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,20 +24,26 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.trnberechnung.model.PlannerEvent
+import com.example.trnberechnung.model.CrewMember
+import com.example.trnberechnung.model.isReadyForExternalAction
+import com.example.trnberechnung.model.withParticipantIds
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditPlannerEventBottomSheet(
     event: PlannerEvent,
+    crewMembers: List<CrewMember>,
     onDismiss: () -> Unit,
     onSave: (PlannerEvent) -> Unit,
     onDelete: () -> Unit,
-    onExternalShare: (PlannerEvent) -> Unit,
+    onShare: (PlannerEvent) -> Unit,
+    onAddToCalendar: (PlannerEvent) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -50,6 +57,20 @@ fun EditPlannerEventBottomSheet(
     var startTime by remember { mutableStateOf(event.startTime ?: "") }
     var endTime by remember { mutableStateOf(event.endTime ?: "") }
     var location by remember { mutableStateOf(event.location ?: "") }
+    var selectedParticipantIds by remember(event.id) { mutableStateOf(event.participantIds.toSet()) }
+    val editedEvent =
+        event.copy(
+            title = title,
+            description = description,
+            startDate = startDate,
+            endDate = endDate,
+            startTime = startTime.ifBlank { null },
+            endTime = endTime.ifBlank { null },
+            location = location.ifBlank { null },
+        )
+            .withParticipantIds(selectedParticipantIds)
+    val showExternalActions = event.title.isNotBlank() || title.isNotBlank()
+    val canUseExternalActions = editedEvent.isReadyForExternalAction()
 
 
     var showStartDatePicker by remember { mutableStateOf(false) }
@@ -315,7 +336,65 @@ fun EditPlannerEventBottomSheet(
                     cardBgColor = cardBgColor
                 )
 
+                Spacer(modifier = Modifier.height(20.dp))
+
+                ParticipantSelection(
+                    crewMembers = crewMembers,
+                    selectedParticipantIds = selectedParticipantIds,
+                    onSelectionChange = { memberId, selected ->
+                        selectedParticipantIds =
+                            if (selected) selectedParticipantIds + memberId else selectedParticipantIds - memberId
+                    },
+                    accentColor = accentColor,
+                    textColor = textColor,
+                    secondaryText = secondaryText,
+                    cardBgColor = cardBgColor,
+                )
+
                 Spacer(modifier = Modifier.height(28.dp))
+
+                if (showExternalActions) {
+                    Text(
+                        text = "TERMIN WEITERGEBEN",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = secondaryText,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+                    )
+                    OutlinedButton(
+                        onClick = { onShare(editedEvent) },
+                        enabled = canUseExternalActions,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text("Termin teilen", fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { onAddToCalendar(editedEvent) },
+                        enabled = canUseExternalActions,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
+                    ) {
+                        Icon(Icons.Default.CalendarMonth, contentDescription = null)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text("Zum Kalender hinzufügen", fontWeight = FontWeight.Bold)
+                    }
+                    if (!canUseExternalActions) {
+                        Text(
+                            text = "Bitte ergänze einen gültigen Titel und korrekte Datums-/Zeitangaben.",
+                            fontSize = 12.sp,
+                            color = secondaryText,
+                            modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
 
                 // Buttons
                 Row(
@@ -335,38 +414,8 @@ fun EditPlannerEventBottomSheet(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (event.title.isNotEmpty()) {
-                            IconButton(
-                                onClick = {
-                                    onExternalShare(event.copy(
-                                        title = title,
-                                        description = description,
-                                        startDate = startDate,
-                                        endDate = endDate,
-                                        startTime = startTime.ifBlank { null },
-                                        endTime = endTime.ifBlank { null },
-                                        location = location.ifBlank { null }
-                                    ))
-                                },
-                                modifier = Modifier.background(accentColor.copy(alpha = 0.1f), CircleShape)
-                            ) {
-                                Icon(Icons.Default.Share, contentDescription = "Extern teilen", tint = accentColor)
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                        }
-
                         Button(
-                            onClick = {
-                                onSave(event.copy(
-                                    title = title,
-                                    description = description,
-                                    startDate = startDate,
-                                    endDate = endDate,
-                                    startTime = startTime.ifBlank { null },
-                                    endTime = endTime.ifBlank { null },
-                                    location = location.ifBlank { null }
-                                ))
-                            },
+                            onClick = { onSave(editedEvent) },
                             colors = ButtonDefaults.buttonColors(containerColor = accentColor),
                             shape = RoundedCornerShape(14.dp),
                             enabled = title.isNotBlank(),
@@ -378,6 +427,98 @@ fun EditPlannerEventBottomSheet(
                     }
                 }
             }
+    }
+}
+
+@Composable
+private fun ParticipantSelection(
+    crewMembers: List<CrewMember>,
+    selectedParticipantIds: Set<Int>,
+    onSelectionChange: (memberId: Int, selected: Boolean) -> Unit,
+    accentColor: Color,
+    textColor: Color,
+    secondaryText: Color,
+    cardBgColor: Color,
+) {
+    Text(
+        text = "Wer ist dabei?",
+        fontSize = 11.sp,
+        fontWeight = FontWeight.ExtraBold,
+        color = secondaryText,
+        letterSpacing = 1.sp,
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+    )
+
+    if (crewMembers.isEmpty()) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = cardBgColor,
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, secondaryText.copy(alpha = 0.2f)),
+        ) {
+            Text(
+                text = "Für diesen Törn sind derzeit keine Crewmitglieder verfügbar.",
+                color = secondaryText,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(16.dp),
+            )
+        }
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        crewMembers.forEach { member ->
+            val selected = member.id in selectedParticipantIds
+            Surface(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = selected,
+                            role = Role.Checkbox,
+                            onValueChange = { onSelectionChange(member.id, it) },
+                        ),
+                color = if (selected) accentColor.copy(alpha = 0.1f) else cardBgColor,
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(
+                    1.dp,
+                    if (selected) accentColor.copy(alpha = 0.55f) else secondaryText.copy(alpha = 0.2f),
+                ),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(accentColor.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = member.name.trim().take(1).uppercase(),
+                            color = accentColor,
+                            fontWeight = FontWeight.ExtraBold,
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = member.name,
+                        modifier = Modifier.weight(1f),
+                        color = textColor,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Checkbox(
+                        checked = selected,
+                        onCheckedChange = null,
+                        colors = CheckboxDefaults.colors(checkedColor = accentColor),
+                    )
+                }
+            }
+        }
     }
 }
 

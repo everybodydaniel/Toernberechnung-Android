@@ -23,7 +23,8 @@ fun PlannerEventEntity.toModel(): PlannerEvent {
         startTime = formatTime(startTime),
         endTime = formatTime(endTime),
         location = location,
-        category = category
+        category = category,
+        participantIds = participantIds,
     )
 }
 
@@ -37,6 +38,7 @@ fun PlannerEvent.toEntity(): PlannerEventEntity {
         startTime = startTime,
         endTime = endTime,
         location = location,
-        category = category
+        category = category,
+        participantIds = participantIds,
     )
 }

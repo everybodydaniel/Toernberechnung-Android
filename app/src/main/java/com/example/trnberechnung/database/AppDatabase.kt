@@ -28,7 +28,7 @@ import androidx.room.TypeConverters
         NorthSeaWarningEntity::class,
         WarningSourceSyncEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -42,6 +42,15 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun northSeaWarningDao(): NorthSeaWarningDao
 
     companion object {
+        val MIGRATION_16_17 =
+            object : Migration(16, 17) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE `planner_events` ADD COLUMN `participantIds` TEXT NOT NULL DEFAULT ''",
+                    )
+                }
+            }
+
         val MIGRATION_15_16 =
             object : Migration(15, 16) {
                 override fun migrate(db: SupportSQLiteDatabase) {

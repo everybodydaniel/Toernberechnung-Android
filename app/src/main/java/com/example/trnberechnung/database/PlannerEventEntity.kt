@@ -14,5 +14,6 @@ data class PlannerEventEntity(
     val startTime: String? = null,
     val endTime: String? = null,
     val location: String? = null,
-    val category: String = "Allgemein"
+    val category: String = "Allgemein",
+    val participantIds: List<Int> = emptyList(),
 )

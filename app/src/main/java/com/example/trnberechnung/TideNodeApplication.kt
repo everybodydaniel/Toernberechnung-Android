@@ -27,7 +27,7 @@ class TideNodeApplication :
                 AppDatabase::class.java,
                 "tide_database",
             )
-            .addMigrations(AppDatabase.MIGRATION_15_16)
+            .addMigrations(AppDatabase.MIGRATION_15_16, AppDatabase.MIGRATION_16_17)
             // Preserve warning data from version 15 onward. Unsupported older development schemas
             // still use the existing destructive fallback because the app has not been published.
             .fallbackToDestructiveMigration(dropAllTables = true)

@@ -16,5 +16,7 @@ data class PlannerEvent(
     val startTime: String? = null,
     val endTime: String? = null,
     val location: String? = null,
-    val category: String = "Allgemein"
+    val category: String = "Allgemein",
+    /** Stable local [CrewMember.id] values; names are resolved only for display and export. */
+    val participantIds: List<Int> = emptyList(),
 )

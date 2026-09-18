@@ -13,4 +13,17 @@ class Converters {
     fun dateToTimestamp(date: LocalDate?): String? {
         return date?.toString()
     }
+
+    @TypeConverter
+    fun participantIdsToStorage(ids: List<Int>?): String =
+        ids.orEmpty().filter { it > 0 }.distinct().sorted().joinToString(separator = ",")
+
+    @TypeConverter
+    fun participantIdsFromStorage(value: String?): List<Int> =
+        value.orEmpty()
+            .split(',')
+            .mapNotNull { it.toIntOrNull() }
+            .filter { it > 0 }
+            .distinct()
+            .sorted()
 }
